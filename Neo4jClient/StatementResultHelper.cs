@@ -129,7 +129,7 @@ namespace Neo4jClient
                     return $"[{string.Join(",", output)}]";
                 }
 
-                return JsonConvert.SerializeObject(o);
+                return JsonConvert.SerializeObject(o, JsonSettings);
             }
 
             if (o is IDictionary || oType == typeof(IDictionary<string, object>) || oType == typeof(Dictionary<string, object>))

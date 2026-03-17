@@ -283,10 +283,19 @@ namespace Neo4jClient
 
             var session = Driver.AsyncSession(x => x.WithDefaultAccessMode(AccessMode.Read));
 
-            var serverInformation = await session.RunAsync("CALL dbms.components()").ConfigureAwait(false);
+            var serverInformation = await session.RunAsync("CALL dbms.components()  YIELD name, versions").ConfigureAwait(false);
+            
             foreach (var record in await serverInformation.ToListAsync().ConfigureAwait(false))
             {
                 var name = record["name"].As<string>();
+
+                if (name.ToLowerInvariant() == "memgraph")
+                {
+                    ServerVersion = RootApiResponse.GetVersion("5.0.0"); // or make it smarter
+                    CypherCapabilities = CypherCapabilities.Cypher50;
+                    continue;
+                }
+
                 if (name.ToLowerInvariant() != "neo4j kernel")
                     continue;
 

@@ -1,6 +1,5 @@
 using System;
-using System.ComponentModel;
-using System.Diagnostics;
+using System.Text.RegularExpressions;
 using Neo4j.Driver;
 using Newtonsoft.Json;
 
@@ -8,52 +7,147 @@ namespace Neo4jClient.Serialization
 {
     public class ZonedDateTimeConverter : JsonConverter
     {
+        // Matches Memgraph format: ZonedDateTime('2020-02-13T19:49:54+00:00[Etc/UTC]')
+        private static readonly Regex MemgraphZonedDateTimePattern =
+            new Regex(@"^ZonedDateTime\('(.+?)(?:\[.+?\])?'\)$", RegexOptions.Compiled);
+
         public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
         {
-            var zdt = (ZonedDateTime)value;
-            zdt.As<DateTimeOffset>();
+            DateTimeOffset dto;
 
-            var typeConverter = TypeDescriptor.GetConverter(zdt.GetType());
-            writer.WriteValue(typeConverter.ConvertToInvariantString(value));
+            if (value is ZonedDateTime zdt)
+                dto = zdt.As<DateTimeOffset>();
+            else if (value is DateTimeOffset dateTimeOffset)
+                dto = dateTimeOffset;
+            else
+                throw new JsonSerializationException($"Cannot serialize {value?.GetType().Name} using ZonedDateTimeConverter.");
+
+            writer.WriteValue(dto.ToString("o"));
         }
 
         public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
         {
-            if (reader.Value == null) return null;
-            var typeConverter = TypeDescriptor.GetConverter(typeof(DateTimeOffset));
-            var dto = (DateTimeOffset) typeConverter.ConvertFromString(reader.Value.ToString());
-            return new ZonedDateTime(dto);
+            if (reader.Value == null) return objectType == typeof(DateTimeOffset?) ? (DateTimeOffset?)null : (object)null;
+
+            // Handle already-parsed DateTime/DateTimeOffset (JToken auto-parsed without DateParseHandling.None)
+            // Avoids locale-specific ToString() which fails RoundtripKind parsing
+            if (reader.Value is DateTimeOffset alreadyDto)
+            {
+                if (objectType == typeof(DateTimeOffset) || objectType == typeof(DateTimeOffset?))
+                    return alreadyDto;
+                return new ZonedDateTime(alreadyDto);
+            }
+
+            if (reader.Value is DateTime alreadyDt)
+            {
+                var dto = new DateTimeOffset(alreadyDt, alreadyDt.Kind == DateTimeKind.Local
+                    ? TimeZoneInfo.Local.GetUtcOffset(alreadyDt)
+                    : TimeSpan.Zero);
+                if (objectType == typeof(DateTimeOffset) || objectType == typeof(DateTimeOffset?))
+                    return dto;
+                return new ZonedDateTime(dto);
+            }
+
+            var parsed = ParseDateTimeOffset(reader.Value.ToString());
+
+            if (objectType == typeof(DateTimeOffset) || objectType == typeof(DateTimeOffset?))
+                return parsed;
+
+            return new ZonedDateTime(parsed);
+        }
+
+        private static DateTimeOffset ParseDateTimeOffset(string value)
+        {
+            var normalized = value?.Trim();
+
+            // Handle Memgraph wrapper format:
+            // ZonedDateTime('2020-02-13T19:49:54+00:00[Etc/UTC]')
+            var match = MemgraphZonedDateTimePattern.Match(normalized);
+            if (match.Success)
+                normalized = match.Groups[1].Value;
+
+            // Handle raw ISO string with zone id suffix:
+            // 2020-02-13T19:49:54+00:00[Etc/UTC]
+            // Keep offset, strip [ZoneName] because DateTimeOffset parser can't parse zone names.
+            var zoneStart = normalized?.IndexOf('[') ?? -1;
+            if (zoneStart >= 0)
+                normalized = normalized.Substring(0, zoneStart);
+
+            // Try with roundtrip kind first (values that include timezone offset)
+            if (DateTimeOffset.TryParse(normalized, null, System.Globalization.DateTimeStyles.RoundtripKind, out var result))
+                return result;
+
+            // Fallback: no timezone info (old LocalDateTime stored data) — assume UTC
+            if (DateTime.TryParse(normalized, null, System.Globalization.DateTimeStyles.AssumeUniversal, out var dt))
+                return new DateTimeOffset(dt, TimeSpan.Zero);
+
+            throw new FormatException($"Cannot parse '{value}' as DateTimeOffset. Normalized value: '{normalized}'. Expected ISO 8601 or Memgraph ZonedDateTime/LocalDateTime format.");
         }
 
         public override bool CanConvert(Type objectType)
         {
-            return typeof(ZonedDateTime) == objectType;
+            return objectType == typeof(ZonedDateTime)
+                || objectType == typeof(DateTimeOffset)
+                || objectType == typeof(DateTimeOffset?);
         }
     }
 
 
     public class LocalDateTimeConverter : JsonConverter
     {
+        // Matches Memgraph format: LocalDateTime('2020-02-13T19:49:54')
+        private static readonly Regex MemgraphLocalDateTimePattern =
+            new Regex(@"^LocalDateTime\('(.+?)'\)$", RegexOptions.Compiled);
+
         public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
         {
-            var ldt = (LocalDateTime)value;
-            ldt.As<DateTime>();
+            DateTime dt;
 
-            var typeConverter = TypeDescriptor.GetConverter(ldt.GetType());
-            writer.WriteValue(typeConverter.ConvertToInvariantString(value));
+            if (value is LocalDateTime ldt)
+                dt = ldt.As<DateTime>();
+            else if (value is DateTime dateTime)
+                dt = dateTime;
+            else
+                throw new JsonSerializationException($"Cannot serialize {value?.GetType().Name} using LocalDateTimeConverter.");
+
+            writer.WriteValue(dt.ToString("o"));
         }
 
         public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
         {
-            if (reader.Value == null) return null;
-            var typeConverter = TypeDescriptor.GetConverter(typeof(DateTime));
-            var dt = typeConverter.ConvertFromString(reader.Value.ToString()) as DateTime?;
-            return new LocalDateTime(dt ?? DateTime.MinValue);
+            if (reader.Value == null) return objectType == typeof(DateTime?) ? (DateTime?)null : (object)null;
+
+            // Handle already-parsed DateTime (JToken auto-parsed without DateParseHandling.None)
+            if (reader.Value is DateTime alreadyDt)
+            {
+                if (objectType == typeof(DateTime) || objectType == typeof(DateTime?))
+                    return alreadyDt;
+                return new LocalDateTime(alreadyDt);
+            }
+
+            var dt = ParseDateTime(reader.Value.ToString());
+
+            if (objectType == typeof(DateTime) || objectType == typeof(DateTime?))
+                return dt;
+
+            return new LocalDateTime(dt);
+        }
+
+        private static DateTime ParseDateTime(string value)
+        {
+            // Handle Memgraph format: LocalDateTime('2020-02-13T19:49:54')
+            var match = MemgraphLocalDateTimePattern.Match(value);
+            if (match.Success)
+                value = match.Groups[1].Value;
+
+            return DateTime.Parse(value, null, System.Globalization.DateTimeStyles.RoundtripKind);
         }
 
         public override bool CanConvert(Type objectType)
         {
-            return typeof(LocalDateTime) == objectType;
+            return objectType == typeof(LocalDateTime)
+                || objectType == typeof(DateTime)
+                || objectType == typeof(DateTime?);
         }
     }
 }

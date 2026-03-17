@@ -72,6 +72,24 @@ namespace Neo4jClient
             var type = value.GetType();
             var typeInfo = type.GetTypeInfo();
 
+
+            // Handle DateTimeOffset BEFORE converter check.
+            // Returning DateTimeOffset directly lets the bolt driver convert it to
+            // ZonedDateTime natively. Going through a JsonConverter round-trips the value
+            // via DeserializeObject<object> which re-parses the ISO string as DateTime
+            // (due to DateParseHandling.DateTime default), causing bolt to store LocalDateTime.
+            if (type == typeof(DateTimeOffset))
+                return value;
+
+            // Convert UTC DateTime to DateTimeOffset so bolt driver stores ZonedDateTime.
+            // Non-UTC DateTime falls through to SerializePrimitive ? LocalDateTime.
+            if (type == typeof(DateTime))
+            {
+                var dt = (DateTime)value;
+                if (dt.Kind == DateTimeKind.Utc)
+                    return new DateTimeOffset(dt, TimeSpan.Zero);
+            }
+
             var converter = converters.FirstOrDefault(c => c.CanConvert(type) && c.CanWrite);
             if (converter != null)
             {
