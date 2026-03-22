@@ -150,4 +150,63 @@ namespace Neo4jClient.Serialization
                 || objectType == typeof(DateTime?);
         }
     }
+
+#if NET6_0_OR_GREATER
+    public class DateOnlyConverter : JsonConverter
+    {
+        // Matches Memgraph format: Date('2024-01-15') or LocalDate('2024-01-15')
+        private static readonly Regex MemgraphLocalDatePattern =
+            new Regex(@"^(?:LocalDate|Date)\('(.+?)'\)$", RegexOptions.Compiled);
+
+        public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
+        {
+            DateOnly dateOnly;
+
+            if (value is LocalDate ld)
+                dateOnly = new DateOnly(ld.Year, ld.Month, ld.Day);
+            else if (value is DateOnly d)
+                dateOnly = d;
+            else
+                throw new JsonSerializationException($"Cannot serialize {value?.GetType().Name} using DateOnlyConverter.");
+
+            writer.WriteValue(dateOnly.ToString("yyyy-MM-dd"));
+        }
+
+        public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
+        {
+            if (reader.Value == null)
+                return objectType == typeof(DateOnly?) ? (DateOnly?)null : (object)null;
+
+            // Handle already-parsed DateTime (Newtonsoft.Json may auto-parse "2024-01-15" as DateTime)
+            if (reader.Value is DateTime alreadyDt)
+            {
+                var result = DateOnly.FromDateTime(alreadyDt);
+                return objectType == typeof(DateOnly?) ? (DateOnly?)result : (object)result;
+            }
+
+            var parsed = ParseDateOnly(reader.Value.ToString());
+
+            return objectType == typeof(DateOnly?) ? (DateOnly?)parsed : (object)parsed;
+        }
+
+        private static DateOnly ParseDateOnly(string value)
+        {
+            var normalized = value?.Trim();
+
+            // Handle Memgraph format: Date('2024-01-15') or LocalDate('2024-01-15')
+            var match = MemgraphLocalDatePattern.Match(normalized);
+            if (match.Success)
+                normalized = match.Groups[1].Value;
+
+            return DateOnly.Parse(normalized);
+        }
+
+        public override bool CanConvert(Type objectType)
+        {
+            return objectType == typeof(LocalDate)
+                || objectType == typeof(DateOnly)
+                || objectType == typeof(DateOnly?);
+        }
+    }
+#endif
 }

@@ -90,6 +90,16 @@ namespace Neo4jClient
                     return new DateTimeOffset(dt, TimeSpan.Zero);
             }
 
+#if NET6_0_OR_GREATER
+            // Convert DateOnly to LocalDate so the bolt driver stores it as a native Date
+            // type in Memgraph rather than a plain string.
+            if (type == typeof(DateOnly))
+            {
+                var d = (DateOnly)value;
+                return new LocalDate(d.Year, d.Month, d.Day);
+            }
+#endif
+
             var converter = converters.FirstOrDefault(c => c.CanConvert(type) && c.CanWrite);
             if (converter != null)
             {

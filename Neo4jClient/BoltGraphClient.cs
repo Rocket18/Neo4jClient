@@ -42,7 +42,10 @@ namespace Neo4jClient
             new TimeZoneInfoConverter(),
             new EnumValueConverter(),
             new ZonedDateTimeConverter(), 
-            new LocalDateTimeConverter()
+            new LocalDateTimeConverter(),
+#if NET6_0_OR_GREATER
+            new DateOnlyConverter()
+#endif
         };
 
         private static readonly DefaultContractResolver DefaultJsonContractResolver = new DefaultContractResolver();
