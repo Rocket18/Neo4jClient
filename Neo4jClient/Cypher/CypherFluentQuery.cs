@@ -277,15 +277,12 @@ namespace Neo4jClient.Cypher
                 return parameters.ToDictionary(x => x.Key, x => x.Value);
             }
 
-            int parameterNumber = rebaseFrom;
-            int maxParamNumber = parameters.Count;
-
             var output = new Dictionary<string, object>();
-            
-            for(int i = maxParamNumber; i >= parameterNumber && i > 0; i--)
+            var parameterNumber = rebaseFrom;
+
+            foreach (var parameter in parameters)
             {
-                var parameter = parameters[i-1];
-                var newP = $"p{i}";
+                var newP = $"p{parameterNumber++}";
                 var regex = string.Format(regexFormat, parameter.Key);
                 output.Add(newP, parameter.Value);
                 storedProcedureText = Regex.Replace(storedProcedureText, regex, $@"${{start}}${newP}${{end}}");
