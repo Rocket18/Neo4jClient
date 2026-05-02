@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.ComponentModel;
@@ -10,6 +10,8 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Reflection;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using Neo4j.Driver;
 using Neo4jClient.ApiModels;
@@ -18,8 +20,6 @@ using Neo4jClient.Cypher;
 using Neo4jClient.Execution;
 using Neo4jClient.Serialization;
 using Neo4jClient.Transactions;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Serialization;
 
 namespace Neo4jClient
 {
@@ -39,7 +39,10 @@ namespace Neo4jClient
             new EnumValueConverter()
         };
 
-        public static readonly DefaultContractResolver DefaultJsonContractResolver = new Neo4jContractResolver();
+        public static readonly Neo4jContractResolver DefaultContractResolver = new Neo4jContractResolver();
+
+        public static readonly JsonSerializerOptions DefaultJsonSerializerOptions =
+            DefaultContractResolver.BuildOptions(DefaultJsonConverters);
 
         private ITransactionManager<HttpResponseMessage> transactionManager;
         private readonly IExecutionPolicyFactory policyFactory;
@@ -157,7 +160,7 @@ namespace Neo4jClient
             RootUri = rootUri;
             JsonConverters = new List<JsonConverter>();
             JsonConverters.AddRange(DefaultJsonConverters);
-            JsonContractResolver = DefaultJsonContractResolver;
+            JsonSerializerOptions = DefaultJsonSerializerOptions;
             ExecutionConfiguration = new ExecutionConfiguration
             {
                 HttpClient = httpClient,
@@ -223,10 +226,10 @@ namespace Neo4jClient
       
         CustomJsonSerializer BuildSerializer()
         {
-            return new CustomJsonSerializer { JsonConverters = JsonConverters, JsonContractResolver = JsonContractResolver };
+            return new CustomJsonSerializer { JsonConverters = JsonConverters, JsonSerializerOptions = JsonSerializerOptions };
         }
 
-        public ISerializer Serializer => new CustomJsonSerializer { JsonConverters = JsonConverters, JsonContractResolver = JsonContractResolver };
+        public ISerializer Serializer => new CustomJsonSerializer { JsonConverters = JsonConverters, JsonSerializerOptions = JsonSerializerOptions };
 
         private static string GetLastPathSegment(string uri)
         {
@@ -392,7 +395,7 @@ namespace Neo4jClient
                 var deserializer = new CypherJsonDeserializer<TResult>(this, query.ResultMode, query.ResultFormat, inTransaction);
                 if (inTransaction)
                 {
-                    response.DeserializationContext.DeserializationContext.JsonContractResolver = query.JsonContractResolver;
+                    response.DeserializationContext.DeserializationContext.JsonSerializerOptions = query.JsonSerializerOptions;
                     results = deserializer.DeserializeFromTransactionPartialContext(response.DeserializationContext, true).ToList();
       
                 }
@@ -405,7 +408,7 @@ namespace Neo4jClient
                 if (query.IncludeQueryStats)
                 {
                     var responseString = await response.ResponseObject.Content.ReadAsStringAsync().ConfigureAwait(false);
-                    var statsContainer = JsonConvert.DeserializeObject<QueryStatsContainer>(await response.ResponseObject.Content.ReadAsStringAsync().ConfigureAwait(false));
+                    var statsContainer = JsonSerializer.Deserialize<QueryStatsContainer>(await response.ResponseObject.Content.ReadAsStringAsync().ConfigureAwait(false));
                     if (statsContainer != null)
                         stats = statsContainer?.Results?.FirstOrDefault()?.Stats;
                 }
@@ -447,13 +450,13 @@ namespace Neo4jClient
             if (response.ResponseObject?.Content != null)
             {
                 var responseString = await response.ResponseObject.Content.ReadAsStringAsync().ConfigureAwait(false);
-                var errors = JsonConvert.DeserializeObject<ErrorsContainer>(responseString);
+                var errors = JsonSerializer.Deserialize<ErrorsContainer>(responseString);
                 if(errors.Errors.Any())
                     throw new ClientException(errors.Errors.First().Code, errors.Errors.First().Message);
 
                 if (query.IncludeQueryStats)
                 {
-                    var statsContainer = JsonConvert.DeserializeObject<QueryStatsContainer>(responseString);
+                    var statsContainer = JsonSerializer.Deserialize<QueryStatsContainer>(responseString);
                     if (statsContainer != null)
                         stats = statsContainer?.Results?.FirstOrDefault()?.Stats;
                 }
@@ -463,13 +466,13 @@ namespace Neo4jClient
         }
         private class QueryStatsContainer
         {
-            [JsonProperty("results")]
+            [JsonPropertyName("results")]
             public IList<ResultsContainer> Results { get; set; }
         }
 
         private class ResultsContainer
         {
-            [JsonProperty("stats")]
+            [JsonPropertyName("stats")]
             public QueryStats Stats { get; set; }
         }
 
@@ -480,9 +483,9 @@ namespace Neo4jClient
 
         private class Error
         {
-            [JsonProperty("code")]
+            [JsonPropertyName("code")]
             public string Code { get; set; }
-            [JsonProperty("message")]
+            [JsonPropertyName("message")]
             public string Message { get; set; }
         }
         private void CheckRoot()
@@ -512,7 +515,7 @@ namespace Neo4jClient
             GC.SuppressFinalize(this);
         }
 
-        public DefaultContractResolver JsonContractResolver { get; set; }
+        public JsonSerializerOptions JsonSerializerOptions { get; set; }
         public Uri GetTransactionEndpoint(string database, bool autoCommit = false)
         {
             CheckRoot();

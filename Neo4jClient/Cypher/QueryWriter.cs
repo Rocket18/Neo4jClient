@@ -4,7 +4,7 @@ using System.Collections.Specialized;
 using System.Linq;
 using System.Text;
 using Neo4j.Driver;
-using Newtonsoft.Json.Serialization;
+using System.Text.Json;
 
 namespace Neo4jClient.Cypher
 {
@@ -77,7 +77,7 @@ namespace Neo4jClient.Cypher
             };
         }
 
-        public CypherQuery ToCypherQuery(IContractResolver contractResolver = null, bool isWrite = true, bool includeQueryStats = false)
+        public CypherQuery ToCypherQuery(JsonSerializerOptions jsonSerializerOptions = null, bool isWrite = true, bool includeQueryStats = false)
         {
             var queryText = queryTextBuilder
                 .ToString()
@@ -89,7 +89,7 @@ namespace Neo4jClient.Cypher
                 resultMode,
                 resultFormat,
                 DatabaseName,
-                contractResolver,
+                jsonSerializerOptions,
                 MaxExecutionTime,
                 CustomHeaders,
                 isWrite,

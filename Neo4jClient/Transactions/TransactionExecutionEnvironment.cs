@@ -1,8 +1,8 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using Neo4j.Driver;
 using Neo4jClient.Execution;
-using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 
 namespace Neo4jClient.Transactions
 {

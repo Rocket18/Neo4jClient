@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -7,27 +7,35 @@ using System.Dynamic;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
+using System.Text.Json;
 using Neo4j.Driver;
 using Neo4jClient.ApiModels.Cypher;
 using Neo4jClient.Cypher;
 using Neo4jClient.Serialization;
-using Newtonsoft.Json;
 
 namespace Neo4jClient
 {
     internal static class StatementResultHelper
     {
-        internal static JsonSerializerSettings JsonSettings { get; set; } =
-            new JsonSerializerSettings
+        internal static JsonSerializerOptions JsonSettings { get; set; } =
+            new JsonSerializerOptions
             {
-                Converters = BoltGraphClient.DefaultJsonConverters.Reverse().ToList()
+                Converters = { }
             };
+
+        private static void InitJsonSettings()
+        {
+            // Populate converters lazily from BoltGraphClient defaults
+            if (JsonSettings.Converters.Count == 0)
+                foreach (var c in BoltGraphClient.DefaultJsonConverters.Reverse())
+                    JsonSettings.Converters.Add(c);
+        }
 
         internal static string ToJsonString(this INode node, bool inSet = false, bool isNested = false, bool isNestedInList = false)
         {
             var props = node
                 .Properties
-                .Select(p => $"\"{p.Key}\":{JsonConvert.SerializeObject(p.Value, JsonSettings)}");
+                .Select(p => $"\"{p.Key}\":{JsonSerializer.Serialize(p.Value, JsonSettings)}");
 
             if (isNestedInList)
             {
@@ -48,7 +56,7 @@ namespace Neo4jClient
         {
             var props = relationship
                 .Properties
-                .Select(p => $"\"{p.Key}\":{JsonConvert.SerializeObject(p.Value, JsonSettings)}");
+                .Select(p => $"\"{p.Key}\":{JsonSerializer.Serialize(p.Value, JsonSettings)}");
 
             if (isNestedInList)
             {
@@ -129,7 +137,7 @@ namespace Neo4jClient
                     return $"[{string.Join(",", output)}]";
                 }
 
-                return JsonConvert.SerializeObject(o, JsonSettings);
+                return JsonSerializer.Serialize(o, JsonSettings);
             }
 
             if (o is IDictionary || oType == typeof(IDictionary<string, object>) || oType == typeof(Dictionary<string, object>))
@@ -182,7 +190,7 @@ namespace Neo4jClient
                     return $"[{{{string.Join(",", output)}}}]";
                 return $"[{string.Join(",", output)}]";
             }
-            return JsonConvert.SerializeObject(o);
+            return JsonSerializer.Serialize(o);
         }
 
         private static string GetColumns(IEnumerable<string> keys)
@@ -276,16 +284,14 @@ namespace Neo4jClient
                 return record.ParseCollection<T>(identifier, graphClient);
 
             var converters = graphClient.JsonConverters;
-            converters.Reverse();
-            var serializerSettings = new JsonSerializerSettings
-            {
-                Converters = converters,
-                ContractResolver = graphClient.JsonContractResolver
-            };
+            var options = graphClient.JsonSerializerOptions ?? GraphClient.DefaultJsonSerializerOptions;
+            var deserializeOptions = new JsonSerializerOptions(options);
+            foreach (var c in converters)
+                deserializeOptions.Converters.Add(c);
 
             foreach (var jsonConverter in converters)
-                if (jsonConverter.CanConvert(typeof(T)) && jsonConverter.CanRead)
-                    return JsonConvert.DeserializeObject<T>(record[identifier].As<INode>().ToJsonString(), serializerSettings);
+                if (jsonConverter.CanConvert(typeof(T)))
+                    return JsonSerializer.Deserialize<T>(record[identifier].As<INode>().ToJsonString(), deserializeOptions);
 
 
             var t = ConstructNew<T>();
@@ -307,10 +313,10 @@ namespace Neo4jClient
                         }
                         else
                         {
-                            var res = JsonConvert.DeserializeObject(
+                            var res = JsonSerializer.Deserialize(
                                 $"\"{node.Properties[property.Name].As<string>()}\"",
                                 property.PropertyType,
-                                serializerSettings);
+                                deserializeOptions);
                             property.SetValue(t, res);
                         }
             return t;
@@ -366,7 +372,7 @@ namespace Neo4jClient
 
         public static string ParseAnonymous(this IRecord record, IGraphClient graphClient, bool onlyReturnData = false)
         {
-            return JsonConvert.SerializeObject(ParseAnonymousAsDynamic(record, graphClient, onlyReturnData));
+            return JsonSerializer.Serialize(ParseAnonymousAsDynamic(record, graphClient, onlyReturnData));
         }
 
         private static dynamic ParsePathResponse(IPath path)
@@ -447,7 +453,7 @@ namespace Neo4jClient
                     var generic = method?.MakeGenericMethod(obj.GetType());
                     var res = generic?.Invoke(null, new object[] {record, identifier, graphClient});
                     if(res == null)
-                        throw new JsonSerializationException($"Unable to serialize {obj.GetType().FullName} correctly. This is likely an error and should be reported to Neo4jClient's github page.");
+                        throw new JsonException($"Unable to serialize {obj.GetType().FullName} correctly. This is likely an error and should be reported to Neo4jClient's github page.");
 
                     inner.Add(res);
                 }

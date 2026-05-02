@@ -9,7 +9,6 @@ namespace Neo4jClient.ApiModels.Cypher
     /// <summary>
     /// Represents the collection of Cypher statements that are going to be sent through a transaction.
     /// </summary>
-    [JsonObject]
     class CypherStatementList : IList<CypherTransactionStatement>
     {
         private readonly IList<CypherTransactionStatement> _statements;

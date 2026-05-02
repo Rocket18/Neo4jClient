@@ -5,6 +5,8 @@ using System.Diagnostics;
 using System.Diagnostics.SymbolStore;
 using System.Linq;
 using System.Reflection;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using Neo4j.Driver;
 using Neo4jClient.ApiModels;
@@ -14,8 +16,6 @@ using Neo4jClient.Execution;
 using Neo4jClient.Serialization;
 using Neo4jClient.Transactions;
 using Neo4jClient.Transactions.Bolt;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Serialization;
 using ITransaction = Neo4jClient.Transactions.ITransaction;
 
 //TODO: Logging
@@ -48,7 +48,8 @@ namespace Neo4jClient
 #endif
         };
 
-        private static readonly DefaultContractResolver DefaultJsonContractResolver = new DefaultContractResolver();
+        private static readonly JsonSerializerOptions DefaultJsonSerializerOptions =
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
 
         private readonly string password;
         private readonly string realm;
@@ -100,7 +101,7 @@ namespace Neo4jClient
 
             JsonConverters = new List<JsonConverter>();
             JsonConverters.AddRange(DefaultJsonConverters);
-            JsonContractResolver = DefaultJsonContractResolver;
+            JsonSerializerOptions = DefaultJsonSerializerOptions;
 
             ExecutionConfiguration = new ExecutionConfiguration
             {
@@ -331,7 +332,7 @@ namespace Neo4jClient
         public List<JsonConverter> JsonConverters { get; }
 
         /// <inheritdoc />
-        public DefaultContractResolver JsonContractResolver { get; set; }
+        public JsonSerializerOptions JsonSerializerOptions { get; set; }
 
         public Uri GetTransactionEndpoint(string database, bool autoCommit = false)
         {
@@ -428,11 +429,12 @@ namespace Neo4jClient
             }
             else
             {
-                StatementResultHelper.JsonSettings = new JsonSerializerSettings
+                StatementResultHelper.JsonSettings = new JsonSerializerOptions
                 {
-                    Converters = JsonConverters,
-                    ContractResolver = JsonContractResolver
+                    PropertyNameCaseInsensitive = true
                 };
+                foreach (var c in JsonConverters)
+                    StatementResultHelper.JsonSettings.Converters.Add(c);
 
                 List<IEnumerable<TResult>> converted = new List<IEnumerable<TResult>>();
                 foreach (var record in result)

@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using Newtonsoft.Json.Serialization;
+using System.Text.Json;
 using System.Collections;
 using System.Collections.Specialized;
 using System.ComponentModel.DataAnnotations;
@@ -112,7 +112,7 @@ namespace Neo4jClient.Cypher
         {
             Client = client as IRawGraphClient ?? throw new ArgumentException("The supplied graph client also needs to implement IRawGraphClient", nameof(client));
             QueryWriter = queryWriter;
-            CamelCaseProperties = Client.JsonContractResolver is CamelCasePropertyNamesContractResolver;
+            CamelCaseProperties = Client.JsonSerializerOptions?.PropertyNamingPolicy == JsonNamingPolicy.CamelCase;
             Advanced = new CypherFluentQueryAdvanced(Client, QueryWriter, isWrite, includeQueryStats);
             IsWrite = isWrite;
             IncludeQueryStats = includeQueryStats;
@@ -473,7 +473,7 @@ namespace Neo4jClient.Cypher
                 w.AppendToClause($", {string.Join(" DESC, ", properties)} DESC"));
         }
 
-        public CypherQuery Query => QueryWriter.ToCypherQuery(Client.JsonContractResolver ?? GraphClient.DefaultJsonContractResolver, IsWrite, IncludeQueryStats);
+        public CypherQuery Query => QueryWriter.ToCypherQuery(Client.JsonSerializerOptions ?? GraphClient.DefaultJsonSerializerOptions, IsWrite, IncludeQueryStats);
 
         public Task ExecuteWithoutResultsAsync()
         {

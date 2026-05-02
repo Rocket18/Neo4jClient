@@ -2,10 +2,10 @@ using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Diagnostics;
 using System.Linq;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Neo4j.Driver;
 using Neo4jClient.Serialization;
-using Newtonsoft.Json.Serialization;
 
 namespace Neo4jClient.Cypher
 {
@@ -27,8 +27,8 @@ namespace Neo4jClient.Cypher
             IDictionary<string, object> queryParameters,
             CypherResultMode resultMode, 
             string database,
-            IContractResolver contractResolver = null) :
-            this(queryText, queryParameters, resultMode, CypherResultFormat.DependsOnEnvironment, database, contractResolver)
+            JsonSerializerOptions jsonSerializerOptions = null) :
+            this(queryText, queryParameters, resultMode, CypherResultFormat.DependsOnEnvironment, database, jsonSerializerOptions)
         {
         }
 
@@ -38,7 +38,7 @@ namespace Neo4jClient.Cypher
             CypherResultMode resultMode,
             CypherResultFormat resultFormat,
             string database,
-            IContractResolver contractResolver = null, 
+            JsonSerializerOptions jsonSerializerOptions = null, 
             int? maxExecutionTime = null, 
             NameValueCollection customHeaders = null,
             bool isWrite = true,
@@ -51,7 +51,7 @@ namespace Neo4jClient.Cypher
             this.queryParameters = queryParameters;
             this.ResultMode = resultMode;
             this.ResultFormat = resultFormat;
-            JsonContractResolver = contractResolver ?? GraphClient.DefaultJsonContractResolver;
+            JsonSerializerOptions = jsonSerializerOptions ?? GraphClient.DefaultJsonSerializerOptions;
             this.MaxExecutionTime = maxExecutionTime;
             this.CustomHeaders = customHeaders;
             IsWrite = isWrite;
@@ -76,7 +76,7 @@ namespace Neo4jClient.Cypher
 
         public CypherResultMode ResultMode { get; }
 
-        public IContractResolver JsonContractResolver { get; }
+        public JsonSerializerOptions JsonSerializerOptions { get; }
 
         public string Database { get; }
 
@@ -90,7 +90,7 @@ namespace Neo4jClient.Cypher
 
         private CustomJsonSerializer BuildSerializer()
         {
-            return new CustomJsonSerializer { JsonConverters = GraphClient.DefaultJsonConverters, JsonContractResolver = JsonContractResolver };
+            return new CustomJsonSerializer { JsonConverters = GraphClient.DefaultJsonConverters, JsonSerializerOptions = JsonSerializerOptions };
         }
 
         public string DebugQueryText
@@ -103,7 +103,6 @@ namespace Neo4jClient.Cypher
                 }
 
                 var serializer = BuildSerializer();
-                serializer.QuoteName = false;
 
                 var text = queryText;
                 foreach (var key in queryParameters.Keys)
