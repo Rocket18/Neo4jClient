@@ -1,10 +1,10 @@
-using Newtonsoft.Json.Linq;
+using System.Text.Json.Nodes;
 
 namespace Neo4jClient.Serialization
 {
     public class PartialDeserializationContext
     {
-        public JToken RootResult { get; set; }
+        public JsonNode RootResult { get; set; }
         public DeserializationContext DeserializationContext { get; set; }
     }
 }

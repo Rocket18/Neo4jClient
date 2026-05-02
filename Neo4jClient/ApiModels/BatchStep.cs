@@ -1,6 +1,6 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Net.Http;
-using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 
 namespace Neo4jClient.ApiModels
 {
@@ -10,19 +10,19 @@ namespace Neo4jClient.ApiModels
         [JsonIgnore]
         public HttpMethod Method { get; set; }
 
-        [JsonProperty("method")]
+        [JsonPropertyName("method")]
         public string MethodAsString
         {
             get { return Method.Method; }
         }
 
-        [JsonProperty("to")]
+        [JsonPropertyName("to")]
         public string To { get; set; }
 
-        [JsonProperty("body")]
+        [JsonPropertyName("body")]
         public object Body { get; set; }
 
-        [JsonProperty("id")]
+        [JsonPropertyName("id")]
         public int Id { get; set; }
     }
 }

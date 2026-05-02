@@ -1,8 +1,8 @@
-﻿using System.Collections;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using Neo4jClient.Cypher;
-using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 
 namespace Neo4jClient.ApiModels.Cypher
 {
@@ -26,7 +26,7 @@ namespace Neo4jClient.ApiModels.Cypher
                 .ToList();
         }
 
-        [JsonProperty("statements")]
+        [JsonPropertyName("statements")]
         public IList<CypherTransactionStatement> Statements => _statements;
 
         public IEnumerator<CypherTransactionStatement> GetEnumerator()

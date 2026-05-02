@@ -1,6 +1,6 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using Neo4jClient.Cypher;
-using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 
 namespace Neo4jClient.ApiModels.Cypher
 {
@@ -21,16 +21,16 @@ namespace Neo4jClient.ApiModels.Cypher
                 IncludeStats = query.IncludeQueryStats;
         }
 
-        [JsonProperty("statement")]
+        [JsonPropertyName("statement")]
         public string Statement { get; }
 
-        [JsonProperty("resultDataContents")]
+        [JsonPropertyName("resultDataContents")]
         public IEnumerable<string> ResultDataContents => formatContents;
 
-        [JsonProperty("parameters")]
+        [JsonPropertyName("parameters")]
         public IDictionary<string, object> Parameters { get; }
 
-        [JsonProperty("includeStats", NullValueHandling = NullValueHandling.Ignore)]
+        [JsonPropertyName("includeStats")]
         public bool? IncludeStats { get; }
     }
 }
