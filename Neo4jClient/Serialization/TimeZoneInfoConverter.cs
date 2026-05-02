@@ -1,22 +1,18 @@
 using System;
 using System.Diagnostics;
-using Newtonsoft.Json;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Neo4jClient.Serialization
 {
-    public class TimeZoneInfoConverter : JsonConverter
+    public class TimeZoneInfoConverter : JsonConverter<TimeZoneInfo>
     {
-        public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
+        public override TimeZoneInfo Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
-            var timeZone = (TimeZoneInfo) value;
-            writer.WriteValue(timeZone.Id);
-        }
-
-        public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
-        {
+            var value = reader.GetString();
             try
             {
-                return TimeZoneInfo.FindSystemTimeZoneById(reader.Value.ToString());
+                return TimeZoneInfo.FindSystemTimeZoneById(value);
             }
             catch
             {
@@ -29,9 +25,9 @@ namespace Neo4jClient.Serialization
             }
         }
 
-        public override bool CanConvert(Type objectType)
+        public override void Write(Utf8JsonWriter writer, TimeZoneInfo value, JsonSerializerOptions options)
         {
-            return typeof(TimeZoneInfo) == objectType;
+            writer.WriteStringValue(value.Id);
         }
     }
 }
