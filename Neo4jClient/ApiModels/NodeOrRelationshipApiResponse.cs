@@ -1,10 +1,10 @@
-﻿using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 
 namespace Neo4jClient.ApiModels
 {
     internal class NodeOrRelationshipApiResponse<TNode>
     {
-        [JsonProperty("data")]
+        [JsonPropertyName("data")]
         public TNode Data { get; set; }
     }
 }

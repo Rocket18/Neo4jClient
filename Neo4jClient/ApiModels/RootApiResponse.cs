@@ -1,6 +1,6 @@
-﻿using System;
+using System;
 using System.Text.RegularExpressions;
-using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 
 namespace Neo4jClient.ApiModels
 {
@@ -9,7 +9,7 @@ namespace Neo4jClient.ApiModels
         private string _transactionFormat;
         private string _transaction;
 
-        [JsonProperty("transaction")]
+        [JsonPropertyName("transaction")]
         public string Transaction
         {
             get => _transaction;
@@ -31,43 +31,43 @@ namespace Neo4jClient.ApiModels
             } 
         }
 
-        // [JsonProperty("cypher")]
+        // [JsonPropertyName("cypher")]
         // public string Cypher { get; set; }
 
-        [JsonProperty("batch")]
+        [JsonPropertyName("batch")]
         public string Batch { get; set; }
 
-        [JsonProperty("node")]
+        [JsonPropertyName("node")]
         public string Node { get; set; }
 
-        [JsonProperty("relationship")]
+        [JsonPropertyName("relationship")]
         public string Relationship { get; set; }
         
-        [JsonProperty("node_index")]
+        [JsonPropertyName("node_index")]
         public string NodeIndex { get; set; }
 
-        [JsonProperty("relationship_index")]
+        [JsonPropertyName("relationship_index")]
         public string RelationshipIndex { get; set; }
 
-        [JsonProperty("reference_node")]
+        [JsonPropertyName("reference_node")]
         public string ReferenceNode { get; set; }
 
-        [JsonProperty("extensions_info")]
+        [JsonPropertyName("extensions_info")]
         public string ExtensionsInfo { get; set; }
 
-        [JsonProperty("neo4j_version")]
+        [JsonPropertyName("neo4j_version")]
         public string Neo4jVersion { get; set; }
 
-        [JsonProperty("neo4j_edition")]
+        [JsonPropertyName("neo4j_edition")]
         public string Neo4jEdition { get; set; }
 
-        [JsonProperty("bolt_direct")]
+        [JsonPropertyName("bolt_direct")]
         public string BoltDirect { get; set; }
 
-        [JsonProperty("bolt_routing")]
+        [JsonPropertyName("bolt_routing")]
         public string BoltRouting { get; set; }
 
-        [JsonProperty("cluster")]
+        [JsonPropertyName("cluster")]
         public string Cluster { get; set; }
 
         /// <summary>

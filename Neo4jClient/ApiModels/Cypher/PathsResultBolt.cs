@@ -1,8 +1,8 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Linq;
 using Neo4j.Driver;
 using Neo4jClient.Extensions;
-using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 
 namespace Neo4jClient.ApiModels.Cypher
 {
@@ -22,35 +22,35 @@ namespace Neo4jClient.ApiModels.Cypher
             Nodes = path.Nodes.Select(r => new PathsResultBoltNode(r)).ToList();
         }
 
-        [JsonProperty("Start")]
+        [JsonPropertyName("Start")]
         public PathsResultBoltNode Start { get; set; }
 
-        [JsonProperty("End")]
+        [JsonPropertyName("End")]
         public PathsResultBoltNode End { get; set; }
 
         [JsonIgnore]
         public int Length => Relationships.Count();
 
-        [JsonProperty("Nodes")]
+        [JsonPropertyName("Nodes")]
         public List<PathsResultBoltNode> Nodes { get; set; }
 
-        [JsonProperty("Relationships")]
+        [JsonPropertyName("Relationships")]
         public List<PathsResultBoltRelationship> Relationships { get; set; }
 
         public class PathsResultBoltRelationship
         {
-            [JsonProperty("Id")]
+            [JsonPropertyName("Id")]
             public long Id { get; set; }
-            [JsonProperty("Type")]
+            [JsonPropertyName("Type")]
             public string Type { get; set; }
-            [JsonProperty("StartNodeId")]
+            [JsonPropertyName("StartNodeId")]
             public long StartNodeId { get; set; }
-            [JsonProperty("EndNodeId")]
+            [JsonPropertyName("EndNodeId")]
             public long EndNodeId { get; set; }
 
             public object this[string key] => Properties[key];
 
-            [JsonProperty("Properties")]
+            [JsonPropertyName("Properties")]
             public Dictionary<string, object> Properties { get; set; }
 
             public PathsResultBoltRelationship() { Properties = new Dictionary<string, object>(); }
@@ -95,12 +95,12 @@ namespace Neo4jClient.ApiModels.Cypher
 
         public class PathsResultBoltNode 
         {
-            [JsonProperty("Id")]
+            [JsonPropertyName("Id")]
             public long Id { get; set; }
-            [JsonProperty("Labels")]
+            [JsonPropertyName("Labels")]
             public List<string> Labels { get; set; }
             public object this[string key] => Properties[key];
-            [JsonProperty("Properties")]
+            [JsonPropertyName("Properties")]
             public Dictionary<string, object> Properties { get; set; }
 
             public PathsResultBoltNode() { Properties = new Dictionary<string, object>(); }
