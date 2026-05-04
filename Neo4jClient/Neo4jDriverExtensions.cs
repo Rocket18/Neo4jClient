@@ -106,16 +106,12 @@ namespace Neo4jClient
 
             if (type == typeof(DateTimeOffset))
             {
-                if ((gc as IBoltGraphClient)?.UseDriverDateTypes ?? false)
-                    return value;
-                return SerializeDateTimeOffset((DateTimeOffset)value);
+                return new ZonedDateTime((DateTimeOffset)value);
             }
 
             if (type == typeof(DateTime))
             {
-                if ((gc as IBoltGraphClient)?.UseDriverDateTypes ?? false)
-                    return value;
-                return SerializeDateTime((DateTime)value);
+                return new LocalDateTime((DateTime)value);
             }
 
             if (typeInfo.IsGenericType && type.GetGenericTypeDefinition() == typeof(Dictionary<,>))
@@ -195,12 +191,12 @@ namespace Neo4jClient
         {
             if (type == typeof(DateTime))
             {
-                return SerializeDateTime((DateTime) instance);
+                return new LocalDateTime((DateTime)instance);
             }
 
             if (type == typeof(DateTimeOffset))
             {
-                return SerializeDateTimeOffset((DateTimeOffset) instance);
+                return new ZonedDateTime((DateTimeOffset)instance);
             }
 
             if (type == typeof(TimeSpan))
@@ -222,14 +218,14 @@ namespace Neo4jClient
             return JsonSerializer.Serialize(instance);
         }
 
-        private static string SerializeDateTime(DateTime dateTime)
+        private static LocalDateTime SerializeDateTime(DateTime dateTime)
         {
-             return dateTime.ToString(DefaultDateTimeFormat, CultureInfo.CurrentCulture);
+            return new LocalDateTime(dateTime);
         }
 
-        private static string SerializeDateTimeOffset(DateTimeOffset dateTime)
+        private static ZonedDateTime SerializeDateTimeOffset(DateTimeOffset dateTime)
         {
-            return dateTime.ToString(DefaultDateTimeFormat, CultureInfo.CurrentCulture);
+            return new ZonedDateTime(dateTime);
         }
 
         private static string SerializeTimeSpan(TimeSpan timeSpan)

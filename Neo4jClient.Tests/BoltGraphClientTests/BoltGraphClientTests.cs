@@ -201,7 +201,7 @@ namespace Neo4jClient.Tests.BoltGraphClientTests
             var expectedParameters = new Dictionary<string, object>
             {
                 {
-                    "testParam", new Dictionary<string, object> {{"Dt", JsonSerializer.Serialize(cwd.Dt).Trim('\"')}}
+                    "testParam", new Dictionary<string, object> {{"Dt", new LocalDateTime(cwd.Dt)}}
                 }
             };
 
@@ -228,7 +228,7 @@ namespace Neo4jClient.Tests.BoltGraphClientTests
             var expectedParameters = new Dictionary<string, object>
             {
                 {
-                    "testParam", new Dictionary<string, object> {{"Dt", JsonSerializer.Serialize(cwd.Dt).Trim('\"')}}
+                    "testParam", new Dictionary<string, object> {{"Dt", new ZonedDateTime(cwd.Dt)}}
                 }
             };
 
