@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using System.Text.Json;
@@ -128,7 +129,7 @@ namespace Neo4jClient.Serialization
             if (typeInfo.IsPrimitive)
             {
                 object tmpVal = value.AsString().Replace("\"", string.Empty);
-                tmpVal = Convert.ChangeType(tmpVal, propertyType);
+                tmpVal = Convert.ChangeType(tmpVal, propertyType, CultureInfo.InvariantCulture);
                 return tmpVal;
             }
 
