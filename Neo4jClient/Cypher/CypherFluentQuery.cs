@@ -277,16 +277,23 @@ namespace Neo4jClient.Cypher
                 return parameters.ToDictionary(x => x.Key, x => x.Value);
             }
 
+            // Build a mapping from old param name → new param name
+            var renameMap = new Dictionary<string, string>();
             var output = new Dictionary<string, object>();
             var parameterNumber = rebaseFrom;
-
             foreach (var parameter in parameters)
             {
                 var newP = $"p{parameterNumber++}";
-                var regex = string.Format(regexFormat, parameter.Key);
+                renameMap[parameter.Key] = newP;
                 output.Add(newP, parameter.Value);
-                storedProcedureText = Regex.Replace(storedProcedureText, regex, $@"${{start}}${newP}${{end}}");
             }
+
+            // Replace all old param references in one pass using a MatchEvaluator to avoid
+            // collisions where a new name matches an old name in a subsequent iteration.
+            var allOldKeysPattern = string.Join("|", renameMap.Keys.Select(k => Regex.Escape(k)));
+            var combinedRegex = new Regex($@"(?<start>^|[\s\(])\$(?<param>{allOldKeysPattern})(?<end>$|[\s\)])");
+            storedProcedureText = combinedRegex.Replace(storedProcedureText, m =>
+                m.Groups["start"].Value + "$" + renameMap[m.Groups["param"].Value] + m.Groups["end"].Value);
 
             newStoredProcText = storedProcedureText;
             return output;

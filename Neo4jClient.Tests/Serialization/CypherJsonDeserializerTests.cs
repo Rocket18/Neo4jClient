@@ -1,9 +1,10 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Neo4jClient.Cypher;
 using Neo4jClient.Serialization;
-using Newtonsoft.Json;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using NSubstitute;
 using Xunit;
 
@@ -14,14 +15,14 @@ namespace Neo4jClient.Tests.Serialization
     {
         const string SetModeContentFormat =
             @"{{
-                'columns' : [ 'a' ],
-                'data' : [ [ {{ 'Foo': '{0}', 'Bar': 'Bar' }} ] ]
+                ""columns"" : [ ""a"" ],
+                ""data"" : [ [ {{ ""Foo"": ""{0}"", ""Bar"": ""Bar"" }} ] ]
             }}";
 
         const string ProjectionModeContentFormat =
             @"{{
-                'columns' : [ 'Foo', 'Bar' ],
-                'data' : [ [ '{0}', 'Bar' ] ]
+                ""columns"" : [ ""Foo"", ""Bar"" ],
+                ""data"" : [ [ ""{0}"", ""Bar"" ] ]
             }}";
 
         private class DateTimeTestCasesFactory
@@ -754,11 +755,11 @@ namespace Neo4jClient.Tests.Serialization
         }
 
         [Fact]
-        public void DeserializeShouldRespectJsonPropertyAttribute()
+        public void DeserializeShouldRespectJsonPropertyNameAttribute()
         {
             // Arrange
             var client = Substitute.For<IGraphClient>();
-            var deserializer = new CypherJsonDeserializer<UserWithJsonPropertyAttribute>(client, CypherResultMode.Set, CypherResultFormat.DependsOnEnvironment);
+            var deserializer = new CypherJsonDeserializer<UserWithJsonPropertyNameAttribute>(client, CypherResultMode.Set, CypherResultFormat.DependsOnEnvironment);
             var content = @"{
   'columns' : [ 'Foo' ],
   'data' : [ [ {
@@ -1054,9 +1055,9 @@ namespace Neo4jClient.Tests.Serialization
             public IEnumerable<Node<object>> Fans { get; set; }
         }
 
-        public class UserWithJsonPropertyAttribute
+        public class UserWithJsonPropertyNameAttribute
         {
-            [JsonProperty("givenName")]
+            [JsonPropertyName("givenName")]
             public string Name { get; set; }
         }
 

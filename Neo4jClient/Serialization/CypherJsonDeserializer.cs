@@ -308,6 +308,7 @@ This means no query was emitted, so a method that doesn't care about getting res
 
         private IEnumerable<TResult> FullDeserializationFromTransactionResponse(string content, DeserializationContext context, bool isHttp)
         {
+            content = CommonDeserializerMethods.NormalizeSingleQuotedJson(content);
             var root = JsonNode.Parse(content) as JsonObject;
             var resultSet = GetRootResultInTransaction(root);
             if (resultSet == null)
@@ -320,6 +321,7 @@ This means no query was emitted, so a method that doesn't care about getting res
 
         IEnumerable<TResult> DeserializeFromRoot(string content, DeserializationContext context, bool isHttp)
         {
+            content = CommonDeserializerMethods.NormalizeSingleQuotedJson(content);
             var root = JsonNode.Parse(content);
             if (!(root is JsonObject))
                 throw new InvalidOperationException("Root expected to be a JSON object.");

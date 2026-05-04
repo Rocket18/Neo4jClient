@@ -38,23 +38,53 @@ namespace Neo4jClient.Serialization
             return DateTypeNameRegex.Replace(content, "NeoDate");
         }
 
-                public static DateTimeOffset? ParseDateTimeOffset(JsonNode value)
+        private static readonly Regex SingleQuotedJsonPattern = new Regex(@"'[^']*'\s*[:,\[\{]|'[^']*'\s*$", RegexOptions.Compiled);
+
+        /// <summary>
+        /// Converts single-quoted JSON (legacy test fixtures / Newtonsoft-lenient style) to
+        /// standard double-quoted JSON that STJ can parse. Only applies when heuristic detects
+        /// single-quoted keys/values are in use (to avoid corrupting embedded Cypher apostrophes).
+        /// </summary>
+        public static string NormalizeSingleQuotedJson(string content)
         {
-            if (value == null) return null;
-            var rawValue = value.AsString();
-            if (string.IsNullOrWhiteSpace(rawValue)) return null;
-            rawValue = rawValue.Replace("NeoDate", "Date");
-            if (!DateRegex.IsMatch(rawValue))
-            {
-                if (!DateTimeOffset.TryParse(rawValue, null, System.Globalization.DateTimeStyles.RoundtripKind, out var parsed))
-                    return null;
-                return parsed;
-            }
-            var ticksMatch = System.Text.RegularExpressions.Regex.Match(rawValue, @"/Date\(([-]?\d+)(?:[+-]\d+)?\)/");
-            if (ticksMatch.Success && long.TryParse(ticksMatch.Groups[1].Value, out var ticks))
-                return DateTimeOffset.FromUnixTimeMilliseconds(ticks);
-            return null;
+            if (string.IsNullOrEmpty(content)) return content;
+            if (!content.Contains('\'')) return content;
+            // Heuristic: single-quoted JSON has patterns like 'key': or 'value', or 'value']
+            if (SingleQuotedJsonPattern.IsMatch(content))
+                return content.Replace("'", "\"");
+            return content;
         }
+
+                public static DateTimeOffset? ParseDateTimeOffset(JsonNode value)
+                {
+                    if (value == null) return null;
+                    var rawValue = value.AsString();
+                    if (string.IsNullOrWhiteSpace(rawValue)) return null;
+                    rawValue = rawValue.Replace("NeoDate", "Date");
+                    if (!DateRegex.IsMatch(rawValue))
+                    {
+                        if (!DateTimeOffset.TryParse(rawValue, null, System.Globalization.DateTimeStyles.RoundtripKind, out var parsed))
+                            return null;
+                        return parsed;
+                    }
+                    // /Date(ticks)/ or /Date(ticks+HHMM)/ or /Date(ticks-HHMM)/
+                    var fullMatch = System.Text.RegularExpressions.Regex.Match(rawValue, @"/Date\(([-]?\d+)([+-]\d{4})?\)/");
+                    if (fullMatch.Success && long.TryParse(fullMatch.Groups[1].Value, out var ticks))
+                    {
+                        var utc = DateTimeOffset.FromUnixTimeMilliseconds(ticks);
+                        if (fullMatch.Groups[2].Success)
+                        {
+                            var offsetStr = fullMatch.Groups[2].Value; // e.g. "+0200" or "-0500"
+                            var sign = offsetStr[0] == '-' ? -1 : 1;
+                            var hours = int.Parse(offsetStr.Substring(1, 2));
+                            var minutes = int.Parse(offsetStr.Substring(3, 2));
+                            var offset = new TimeSpan(sign * hours, sign * minutes, 0);
+                            return new DateTimeOffset(utc.DateTime + offset, offset);
+                        }
+                        return utc;
+                    }
+                    return null;
+                }
 
                 public static DateTime? ParseDateTime(JsonNode value)
         {
@@ -63,12 +93,12 @@ namespace Neo4jClient.Serialization
             rawValue = rawValue.Replace("NeoDate", "Date");
             if (!DateRegex.IsMatch(rawValue))
             {
-                if (!DateTime.TryParse(rawValue, out var parsed)) return null;
-                return rawValue.EndsWith("Z", StringComparison.OrdinalIgnoreCase) ? parsed.ToUniversalTime() : parsed;
+                if (!DateTime.TryParse(rawValue, null, System.Globalization.DateTimeStyles.RoundtripKind, out var parsed)) return null;
+                return parsed;
             }
             var ticksMatch = System.Text.RegularExpressions.Regex.Match(rawValue, @"/Date\(([-]?\d+)(?:[+-]\d+)?\)/");
             if (ticksMatch.Success && long.TryParse(ticksMatch.Groups[1].Value, out var ticks))
-                return DateTimeOffset.FromUnixTimeMilliseconds(ticks).DateTime;
+                return DateTimeOffset.FromUnixTimeMilliseconds(ticks).UtcDateTime;
             return null;
         }
 
@@ -222,8 +252,8 @@ namespace Neo4jClient.Serialization
             }
             else if (type == typeof(object))
             {
-                if (element is JsonValue jv && jv.TryGetValue<object>(out var primitiveVal))
-                    instance = primitiveVal;
+                if (element is JsonValue jv)
+                    instance = UnwrapJsonValue(jv);
                 else
                     instance = element;
             }
@@ -244,20 +274,30 @@ namespace Neo4jClient.Serialization
             return instance;
         }
 
+        [ThreadStatic]
+        private static bool _inTryJsonConverters;
+
         static bool TryJsonConverters(DeserializationContext context, Type type, JsonNode element, out object instance)
         {
             instance = null;
             if (context.JsonConverters == null || context.JsonConverters.Length == 0) return false;
             var converter = context.JsonConverters.FirstOrDefault(c => c.CanConvert(type));
             if (converter == null) return false;
+            if (_inTryJsonConverters) return false;   // prevent recursive re-entry
             var json = element?.ToJsonString() ?? "null";
-            var options = context.JsonSerializerOptions ?? new JsonSerializerOptions();
+            // Build options that include the registered converters so they are available during deserialization
+            var options = new JsonSerializerOptions(context.JsonSerializerOptions ?? new JsonSerializerOptions());
+            foreach (var c in context.JsonConverters)
+                if (!options.Converters.Contains(c))
+                    options.Converters.Add(c);
+            _inTryJsonConverters = true;
             try
             {
                 instance = JsonSerializer.Deserialize(json, type, options);
                 return true;
             }
             catch { return false; }
+            finally { _inTryJsonConverters = false; }
         }
         static object MutateObject(DeserializationContext context, JsonNode value, IEnumerable<TypeMapping> typeMappings, int nestingLevel,
                                    TypeMapping mapping, Type propertyType)
@@ -298,6 +338,21 @@ namespace Neo4jClient.Serialization
             }
         }
 
+        /// <summary>
+        /// Unwraps a <see cref="JsonValue"/> to the most natural CLR primitive type.
+        /// </summary>
+        private static object UnwrapJsonValue(JsonValue jv)
+        {
+            // Try common primitives in order of specificity
+            if (jv.TryGetValue<bool>(out var boolVal)) return boolVal;
+            if (jv.TryGetValue<long>(out var longVal)) return longVal;
+            if (jv.TryGetValue<double>(out var dblVal)) return dblVal;
+            if (jv.TryGetValue<string>(out var strVal)) return strVal;
+            // Fallback: return the raw object (may be JsonElement for edge cases)
+            if (jv.TryGetValue<object>(out var objVal)) return objVal;
+            return jv;
+        }
+
         public static IDictionary BuildDictionary(DeserializationContext context, Type type, JsonObject elements, IEnumerable<TypeMapping> typeMappings, int nestingLevel)
         {
             typeMappings = typeMappings.ToArray();
@@ -327,7 +382,10 @@ namespace Neo4jClient.Serialization
                 if (itemType.GetTypeInfo().IsPrimitive)
                 {
                     if (element is JsonValue jv)
-                        list.Add(Convert.ChangeType(jv.GetValue<object>(), itemType));
+                    {
+                        var raw = jv.GetValue<object>();
+                        list.Add(Convert.ChangeType(raw.ToString(), itemType));
+                    }
                 }
                 else if (itemType == typeof(string))
                     list.Add(element.AsString());
@@ -346,7 +404,10 @@ namespace Neo4jClient.Serialization
                 if (itemType.GetTypeInfo().IsPrimitive)
                 {
                     if (element is JsonValue jv)
-                        list.Add(Convert.ChangeType(jv.GetValue<object>(), itemType));
+                    {
+                        var raw = jv.GetValue<object>();
+                        list.Add(Convert.ChangeType(raw.ToString(), itemType));
+                    }
                 }
                 else if (itemType == typeof(string))
                     list.Add(element.AsString());

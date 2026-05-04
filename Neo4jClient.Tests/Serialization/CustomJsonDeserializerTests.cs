@@ -1,14 +1,14 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Threading;
 using FluentAssertions;
 using Neo4jClient.Serialization;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Converters;
-using Newtonsoft.Json.Linq;
-using Newtonsoft.Json.Serialization;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.Json.Nodes;
+
 using NSubstitute;
 using Xunit;
 
@@ -30,67 +30,37 @@ namespace Neo4jClient.Tests.Serialization
                 public NestedClass NestedClass { get; set; }
             }
 
-            private class NeoDateTimeSerializer : JsonConverter
+            private class NeoDateTimeSerializer : System.Text.Json.Serialization.JsonConverter<DateTime>
             {
-                public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
-                {
-                    var dt = (DateTime)value;
-                    writer.WriteValue(dt.ToUniversalTime().Ticks);
-                }
+                public override DateTime Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+                    => new DateTime(reader.GetInt64(), DateTimeKind.Utc);
 
-                public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
-                {
-                    var val = new DateTime((long)reader.Value, DateTimeKind.Utc);
-                    return val;
-                }
-
-                public override bool CanConvert(Type objectType)
-                {
-                    return objectType == typeof(DateTime);
-                }
+                public override void Write(Utf8JsonWriter writer, DateTime value, JsonSerializerOptions options)
+                    => writer.WriteNumberValue(value.ToUniversalTime().Ticks);
             }
 
-            private class ClassWithClassPropertyJsonSerializer : JsonConverter
+            private class ClassWithClassPropertyJsonSerializer : System.Text.Json.Serialization.JsonConverter<ClassWithClassProperty>
             {
-                public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
+                public override ClassWithClassProperty Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
                 {
-                    throw new NotImplementedException();
-                }
+                    using var doc = JsonDocument.ParseValue(ref reader);
+                    var root = doc.RootElement;
+                    // unwrap "data" wrapper if present
+                    if (root.TryGetProperty("data", out var data))
+                        root = data;
 
-                public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
-                {
-                    if (objectType != typeof(ClassWithClassProperty))
-                        return null;
-
-                    //Load our object
-                    var jObject = JObject.Load(reader);
-
-                    var data = jObject.Property("data");
-                    if (data != null)
-                        jObject = data.Value as JObject;
-
-                    //Get the InsString token into a temp var
-                    var token = jObject.Property(nameof(NestedClass)).Value;
-                    //Remove it so it's not deserialized by Json.NET
-                    jObject.Remove(nameof(NestedClass));
-
-                    //Get the dictionary ourselves and deserialize
-                    var nestedClass = JsonConvert.DeserializeObject<NestedClass>(token.ToString());
-
-                    //The output
-                    var output = JsonConvert.DeserializeObject<ClassWithClassProperty>(jObject.ToString());
-
-                    //Add our dictionary
-                    output.NestedClass = nestedClass;
-
-                    //return
+                    var output = new ClassWithClassProperty
+                    {
+                        SimpleString = root.TryGetProperty(nameof(ClassWithClassProperty.SimpleString), out var ss) ? ss.GetString() : null,
+                        NestedClass = root.TryGetProperty(nameof(ClassWithClassProperty.NestedClass), out var nc)
+                            ? JsonSerializer.Deserialize<NestedClass>(nc.GetRawText(), options)
+                            : null
+                    };
                     return output;
                 }
 
-                public override bool CanConvert(Type objectType)
-                {
-                    return objectType == typeof(ClassWithClassProperty);
-                }
+                public override void Write(Utf8JsonWriter writer, ClassWithClassProperty value, JsonSerializerOptions options)
+                    => throw new NotImplementedException();
             }
 
             private class DtModel
@@ -103,7 +73,7 @@ namespace Neo4jClient.Tests.Serialization
             {
                 // Arrange
                 var deserializer = new CustomJsonDeserializer(new List<JsonConverter>{new NeoDateTimeSerializer()}, new CultureInfo("en-US"));
-                var content = $"{{'Dt':{630822816000000000}}}";
+                var content = $"{{\"Dt\":{630822816000000000}}}";
 
                 // Act
                 var result = deserializer.Deserialize<DtModel>(content);
@@ -144,7 +114,7 @@ namespace Neo4jClient.Tests.Serialization
                 {
                     // Arrange
                     var deserializer = new CustomJsonDeserializer(GraphClient.DefaultJsonConverters, new CultureInfo(cultureName));
-                    var content = string.Format("{{'Foo':'{0}'}}", input);
+                    var content = $"{{\"Foo\":\"{input}\"}}";
 
                     // Act
                     var result = deserializer.Deserialize<DateTimeOffsetModel>(content);
@@ -180,7 +150,7 @@ namespace Neo4jClient.Tests.Serialization
                 {
                     // Arrange
                     var deserializer = new CustomJsonDeserializer(GraphClient.DefaultJsonConverters, new CultureInfo(cultureName));
-                    var content = string.Format("{{'Foo':'{0}'}}", input);
+                    var content = $"{{\"Foo\":\"{input}\"}}";
 
                     // Act
                     var result = deserializer.Deserialize<DateTimeModel>(content);
@@ -206,7 +176,7 @@ namespace Neo4jClient.Tests.Serialization
                     .Where(s => TimeZoneInfo.GetSystemTimeZones().Any(tz => tz.Id.Equals(s)))
                     .FirstOrDefault(tz => tz != null);
                 Assert.NotNull(chosenTimeZone); // if this fails try adding a timezone that your platform has to the list above
-                var content = $"{{'Foo':'{chosenTimeZone}'}}";
+                var content = $"{{\"Foo\":\"{chosenTimeZone}\"}}";
 
                 // Act
                 var result = deserializer.Deserialize<TimeZoneModel>(content);
@@ -228,7 +198,7 @@ namespace Neo4jClient.Tests.Serialization
             {
                 // Arrange
                 var deserializer = new CustomJsonDeserializer(GraphClient.DefaultJsonConverters);
-                var content = string.Format("{{'Foo':'{0}'}}", value);
+                var content = $"{{\"Foo\":\"{value}\"}}";
 
                 // Act
                 var result = deserializer.Deserialize<TimeSpanModel>(content);
@@ -260,10 +230,10 @@ namespace Neo4jClient.Tests.Serialization
 
             public class EnumModel
             {
-                [JsonProperty]
+                [System.Text.Json.Serialization.JsonInclude]
                 public Gender Gender { get; set; }
 
-                [JsonProperty]
+                [System.Text.Json.Serialization.JsonInclude]
                 public Gender? GenderNullable { get; set; }
             }
 
@@ -276,40 +246,33 @@ namespace Neo4jClient.Tests.Serialization
 
             public class EnumerableModel
             {
-                [JsonProperty]
+                [System.Text.Json.Serialization.JsonInclude]
                 public IEnumerable<Guid> Guids { get; set; }
             }
 
             [Fact]
             public void ReadJsonCanMapNullableEnumsToEnum()
             {
-                // Arrange
-                var conv = new NullableEnumValueConverter();
-                var jsonReader = Substitute.For<JsonReader>();
-                jsonReader.Value.ReturnsForAnyArgs("Female");
-
-                // Act
-                var result = conv.ReadJson(jsonReader, typeof(Gender?), null, null);
+                // Arrange & Act
+                var json = "\"Female\"";
+                var options = new JsonSerializerOptions();
+                options.Converters.Add(new NullableEnumValueConverter());
+                var result = JsonSerializer.Deserialize<Gender?>(json, options);
                 var expected = (Gender?) Gender.Female;
 
                 // Assert
                 Assert.Equal(expected, result);
             }
 
-            private class DateTimeDeserializer : DateTimeConverterBase
+            private class DateTimeDeserializer : System.Text.Json.Serialization.JsonConverter<DateTime?>
             {
-                public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
-                {
-                    if (value.GetType().IsAssignableFrom(typeof(DateTime)))
-                        writer.WriteValue(((DateTime) value).Ticks);
-                }
+                public override DateTime? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+                    => new DateTime(long.Parse(reader.GetString() ?? "0"));
 
-                public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
+                public override void Write(Utf8JsonWriter writer, DateTime? value, JsonSerializerOptions options)
                 {
-                    if (objectType.IsAssignableFrom(typeof(DateTime)))
-                        return new DateTime(long.Parse(reader.Value.ToString()));
-
-                    return DateTime.MinValue;
+                    if (value.HasValue) writer.WriteNumberValue(value.Value.Ticks);
+                    else writer.WriteNullValue();
                 }
             }
 
@@ -407,7 +370,7 @@ namespace Neo4jClient.Tests.Serialization
                     var newCulture = new CultureInfo(CultureInfo.CurrentCulture.Name) {NumberFormat = {NumberDecimalSeparator = ","}};
                     Thread.CurrentThread.CurrentCulture = newCulture;
 
-                    const string serializedModelWithDecimal = "{'data':{'MyDecimalValue':0.5}}";
+                    const string serializedModelWithDecimal = "{\"data\":{\"MyDecimalValue\":0.5}}";
 
                     //Act
                     var customDeserializer = new CustomJsonDeserializer(GraphClient.DefaultJsonConverters);
@@ -442,11 +405,11 @@ namespace Neo4jClient.Tests.Serialization
                     S = "short property"
                 };
                 var serializer = new CustomJsonSerializer();
-                serializer.JsonContractResolver = new CamelCasePropertyNamesContractResolver();
+                serializer.JsonSerializerOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
                 var st = serializer.Serialize(model);
 
                 //act
-                var deserializer = new CustomJsonDeserializer(GraphClient.DefaultJsonConverters, resolver: (DefaultContractResolver) serializer.JsonContractResolver);
+                var deserializer = new CustomJsonDeserializer(GraphClient.DefaultJsonConverters, options: serializer.JsonSerializerOptions);
                 var output = deserializer.Deserialize<CamelModel>(st);
 
                 //assert
@@ -482,11 +445,11 @@ namespace Neo4jClient.Tests.Serialization
                 };
 
                 var serializer = new CustomJsonSerializer();
-                serializer.JsonContractResolver = new CamelCasePropertyNamesContractResolver();
+                serializer.JsonSerializerOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
                 var st = serializer.Serialize(model);
 
                 //act
-                var deserializer = new CustomJsonDeserializer(GraphClient.DefaultJsonConverters, resolver: (DefaultContractResolver) serializer.JsonContractResolver);
+                var deserializer = new CustomJsonDeserializer(GraphClient.DefaultJsonConverters, options: serializer.JsonSerializerOptions);
                 var output = deserializer.Deserialize<List<CamelModel>>(st);
 
                 //assert

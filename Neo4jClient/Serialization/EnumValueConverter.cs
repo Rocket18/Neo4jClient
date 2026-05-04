@@ -22,6 +22,12 @@ namespace Neo4jClient.Serialization
         {
             public override T Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
             {
+                if (reader.TokenType == JsonTokenType.Number)
+                {
+                    var numericValue = reader.GetInt64();
+                    return (T)Enum.ToObject(typeof(T), numericValue);
+                }
+
                 var value = reader.GetString();
                 return (T)Enum.Parse(typeof(T), value);
             }

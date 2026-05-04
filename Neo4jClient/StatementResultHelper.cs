@@ -20,6 +20,7 @@ namespace Neo4jClient
         internal static JsonSerializerOptions JsonSettings { get; set; } =
             new JsonSerializerOptions
             {
+                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
                 Converters = { }
             };
 
@@ -27,8 +28,8 @@ namespace Neo4jClient
         {
             // Populate converters lazily from BoltGraphClient defaults
             if (JsonSettings.Converters.Count == 0)
-                foreach (var c in BoltGraphClient.DefaultJsonConverters.Reverse())
-                    JsonSettings.Converters.Add(c);
+                foreach (var c in BoltGraphClient.DefaultJsonConverters)
+                    if (c != null) JsonSettings.Converters.Add(c);
         }
 
         internal static string ToJsonString(this INode node, bool inSet = false, bool isNested = false, bool isNestedInList = false)
@@ -446,6 +447,10 @@ namespace Neo4jClient
 
                         inner.Add(parsedItems);
                     }
+                }
+                else if (obj is ZonedDateTime zonedDateTime)
+                {
+                    inner.Add(zonedDateTime.ToString());
                 }
                 else
                 {

@@ -1,9 +1,10 @@
-﻿using System;
+using System;
 using FluentAssertions;
 using Neo4jClient.Cypher;
 using Neo4jClient.Extensions;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Serialization;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
 using NSubstitute;
 using Xunit;
 
@@ -28,13 +29,13 @@ namespace Neo4jClient.Tests.Cypher
 
         class FooWithJsonProperties
         {
-            [JsonProperty("bar")]
+            [JsonPropertyName("bar")]
             public string Bar { get; set; }
         }
 
-        [JsonObject(NamingStrategyType = typeof(CamelCaseNamingStrategy))]
-        class FooWithCamelCaseNamingStrategy
+                class FooWithCamelCaseNamingStrategy
         {
+            [JsonPropertyName("bar")]
             public string Bar { get; set; }
         }
 
@@ -241,7 +242,7 @@ namespace Neo4jClient.Tests.Cypher
         public void ComparePropertiesAcrossEntitiesEqualCamel()
         {
             var client = Substitute.For<IRawGraphClient>();
-            client.JsonContractResolver = new CamelCasePropertyNamesContractResolver();
+            client.JsonSerializerOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
             var query = new CypherFluentQuery(client)
                 .Where<FooCamel, FooCamel>((a, b) => a.Bar == b.Bar && a.LongBar == b.LongBar && a.a == b.a && a.B == b.B)
                 .Query;
@@ -254,7 +255,7 @@ namespace Neo4jClient.Tests.Cypher
         public void ComparePropertiesAcrossEntitiesNotEqualCamel()
         {
             var client = Substitute.For<IRawGraphClient>();
-            client.JsonContractResolver = new CamelCasePropertyNamesContractResolver();
+            client.JsonSerializerOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
             var query = new CypherFluentQuery(client)
                 .Where<FooCamel, FooCamel>((a, b) => a.Bar != b.Bar && a.LongBar != b.LongBar && a.a != b.a && a.B != b.B)
                 .Query;
@@ -267,7 +268,7 @@ namespace Neo4jClient.Tests.Cypher
         public void NestOrAndAndCorrectlyCamel()
         {
             var client = Substitute.For<IRawGraphClient>();
-            client.JsonContractResolver = new CamelCasePropertyNamesContractResolver();
+            client.JsonSerializerOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
             var query = new CypherFluentQuery(client)
                 .Where((FooCamel a, FooCamel b) => a.LongBar == 123 || b.Bar == 456)
                 .AndWhere((FooCamel c) => c.B == 789)
@@ -281,7 +282,7 @@ namespace Neo4jClient.Tests.Cypher
         public void WhereIfTrueCamel()
         {
             var client = Substitute.For<IRawGraphClient>();
-            client.JsonContractResolver = new CamelCasePropertyNamesContractResolver();
+            client.JsonSerializerOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
             var query = new CypherFluentQuery(client)
                 .WhereIf(true, (FooCamel a) => a.LongBar == 123)
                 .Query;
@@ -294,7 +295,7 @@ namespace Neo4jClient.Tests.Cypher
         public void WhereIfFalseCamel()
         {
             var client = Substitute.For<IRawGraphClient>();
-            client.JsonContractResolver = new CamelCasePropertyNamesContractResolver();
+            client.JsonSerializerOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
             var query = new CypherFluentQuery(client)
                 .WhereIf(false, (FooCamel a) => a.LongBar == 123)
                 .Query;
@@ -307,7 +308,7 @@ namespace Neo4jClient.Tests.Cypher
         public void AndWhereIfCamel()
         {
             var client = Substitute.For<IRawGraphClient>();
-            client.JsonContractResolver = new CamelCasePropertyNamesContractResolver();
+            client.JsonSerializerOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
             var query = new CypherFluentQuery(client)
                 .Where((FooCamel a, FooCamel b) => a.LongBar == 123 || b.Bar == 456)
                 .AndWhereIf(11 == 11, (FooCamel c) => c.B == 789)
@@ -321,7 +322,7 @@ namespace Neo4jClient.Tests.Cypher
         public void AndWhereIfFalseCamel()
         {
             var client = Substitute.For<IRawGraphClient>();
-            client.JsonContractResolver = new CamelCasePropertyNamesContractResolver();
+            client.JsonSerializerOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
             var query = new CypherFluentQuery(client)
                 .Where((FooCamel a, FooCamel b) => a.LongBar == 123 || b.Bar == 456)
                 .AndWhereIf(11 == 12, (FooCamel c) => c.B == 789)
@@ -335,7 +336,7 @@ namespace Neo4jClient.Tests.Cypher
         public void OrWhereIfCamel()
         {
             var client = Substitute.For<IRawGraphClient>();
-            client.JsonContractResolver = new CamelCasePropertyNamesContractResolver();
+            client.JsonSerializerOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
             var query = new CypherFluentQuery(client)
                 .Where((FooCamel a, FooCamel b) => a.LongBar == 123 || b.Bar == 456)
                 .OrWhereIf(11 == 11, (FooCamel c) => c.B == 789)
@@ -349,7 +350,7 @@ namespace Neo4jClient.Tests.Cypher
         public void OrWhereIfFalseCamel()
         {
             var client = Substitute.For<IRawGraphClient>();
-            client.JsonContractResolver = new CamelCasePropertyNamesContractResolver();
+            client.JsonSerializerOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
             var query = new CypherFluentQuery(client)
                 .Where((FooCamel a, FooCamel b) => a.LongBar == 123 || b.Bar == 456)
                 .OrWhereIf(11 == 12, (FooCamel c) => c.B == 789)

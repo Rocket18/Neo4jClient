@@ -288,7 +288,7 @@ namespace Neo4jClient
             var session = Driver.AsyncSession(x => x.WithDefaultAccessMode(AccessMode.Read));
 
             var serverInformation = await session.RunAsync("CALL dbms.components()  YIELD name, versions").ConfigureAwait(false);
-            
+
             foreach (var record in await serverInformation.ToListAsync().ConfigureAwait(false))
             {
                 var name = record["name"].As<string>();
@@ -429,12 +429,14 @@ namespace Neo4jClient
             }
             else
             {
-                StatementResultHelper.JsonSettings = new JsonSerializerOptions
+                var localSettings = new JsonSerializerOptions
                 {
-                    PropertyNameCaseInsensitive = true
+                    PropertyNameCaseInsensitive = true,
+                    Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
                 };
                 foreach (var c in JsonConverters)
-                    StatementResultHelper.JsonSettings.Converters.Add(c);
+                    if (c != null) localSettings.Converters.Add(c);
+                StatementResultHelper.JsonSettings = localSettings;
 
                 List<IEnumerable<TResult>> converted = new List<IEnumerable<TResult>>();
                 foreach (var record in result)

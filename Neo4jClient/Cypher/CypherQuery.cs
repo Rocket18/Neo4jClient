@@ -90,7 +90,12 @@ namespace Neo4jClient.Cypher
 
         private CustomJsonSerializer BuildSerializer()
         {
-            return new CustomJsonSerializer { JsonConverters = GraphClient.DefaultJsonConverters, JsonSerializerOptions = JsonSerializerOptions };
+            var options = JsonSerializerOptions != null
+                ? new JsonSerializerOptions(JsonSerializerOptions)
+                : new JsonSerializerOptions();
+            options.Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping;
+            options.WriteIndented = false;
+            return new CustomJsonSerializer { JsonConverters = GraphClient.DefaultJsonConverters, JsonSerializerOptions = options };
         }
 
         public string DebugQueryText

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using FluentAssertions;
@@ -28,7 +28,7 @@ namespace Neo4jClient.Tests.Serialization
         public async Task SerializesDateTimeAsNeoDateInBolt()
         {
             var mockSession = new Mock<IAsyncSession>();
-            mockSession.Setup(s => s.RunAsync("CALL dbms.components()", null)).Returns(Task.FromResult<IResultCursor>(new BoltGraphClientTests.BoltGraphClientTests.ServerInfo()));
+            mockSession.Setup(s => s.RunAsync("CALL dbms.components()  YIELD name, versions", null)).Returns(Task.FromResult<IResultCursor>(new BoltGraphClientTests.BoltGraphClientTests.ServerInfo()));
             var dt = new DateTime(2000, 1, 1, 0, 0, 0);
 
             var mockDriver = new Mock<IDriver>();
@@ -64,7 +64,7 @@ namespace Neo4jClient.Tests.Serialization
             var oldVersion = new Version(3, 0, 0);
 
             // for ConnectAsync()
-            mockSession.Setup(s => s.RunAsync("CALL dbms.components()", null)).Returns(Task.FromResult<IResultCursor>(new BoltGraphClientTests.BoltGraphClientTests.ServerInfo(oldVersion)));
+            mockSession.Setup(s => s.RunAsync("CALL dbms.components()  YIELD name, versions", null)).Returns(Task.FromResult<IResultCursor>(new BoltGraphClientTests.BoltGraphClientTests.ServerInfo(oldVersion)));
 
             var mockDriver = new Mock<IDriver>();
             mockDriver.Setup(d => d.AsyncSession(It.IsAny<Action<SessionConfigBuilder>>())).Returns(mockSession.Object);
@@ -79,7 +79,7 @@ namespace Neo4jClient.Tests.Serialization
         {
             var mockSession = new Mock<IAsyncSession>();
             // for ConnectAsync()
-            mockSession.Setup(s => s.RunAsync("CALL dbms.components()", null)).Returns(Task.FromResult<IResultCursor>(new BoltGraphClientTests.BoltGraphClientTests.ServerInfo()));
+            mockSession.Setup(s => s.RunAsync("CALL dbms.components()  YIELD name, versions", null)).Returns(Task.FromResult<IResultCursor>(new BoltGraphClientTests.BoltGraphClientTests.ServerInfo()));
             
             var dt1 = new DateTime(2000, 1, 1, 0, 0, 0);
             var dt2 = new DateTimeOffset(dt1);
@@ -112,7 +112,7 @@ namespace Neo4jClient.Tests.Serialization
         {
             var mockSession = new Mock<IAsyncSession>();
             // for ConnectAsync()
-            mockSession.Setup(s => s.RunAsync("CALL dbms.components()", null)).Returns(Task.FromResult<IResultCursor>(new BoltGraphClientTests.BoltGraphClientTests.ServerInfo()));
+            mockSession.Setup(s => s.RunAsync("CALL dbms.components()  YIELD name, versions", null)).Returns(Task.FromResult<IResultCursor>(new BoltGraphClientTests.BoltGraphClientTests.ServerInfo()));
 
             var mockDriver = new Mock<IDriver>();
             mockDriver.Setup(d => d.AsyncSession(It.IsAny<Action<SessionConfigBuilder>>())).Returns(mockSession.Object);

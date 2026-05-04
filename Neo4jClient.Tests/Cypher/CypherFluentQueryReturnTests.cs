@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
@@ -6,8 +6,9 @@ using System.Net;
 using System.Threading.Tasks;
 using Neo4jClient.ApiModels.Cypher;
 using Neo4jClient.Cypher;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Serialization;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
 using NSubstitute;
 using Xunit;
 
@@ -16,7 +17,7 @@ namespace Neo4jClient.Tests.Cypher
     
     class FooWithJsonProperties
     {
-        [JsonProperty("bar")]
+        [JsonPropertyName("bar")]
         public string Bar { get; set; }
     }
 
@@ -249,7 +250,7 @@ namespace Neo4jClient.Tests.Cypher
         public void ShouldReturnSpecificPropertyOnItsOwnCamel()
         {
             var client = Substitute.For<IRawGraphClient>();
-            client.JsonContractResolver = new CamelCasePropertyNamesContractResolver();
+            client.JsonSerializerOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
             var query = new CypherFluentQuery(client)
                 .Return(a => a.As<Commodity>().Name)
                 .Query;
@@ -340,7 +341,7 @@ namespace Neo4jClient.Tests.Cypher
         public void ShouldUseSetResultModeForSpecificPropertyReturnCamel()
         {
             var client = Substitute.For<IRawGraphClient>();
-            client.JsonContractResolver = new CamelCasePropertyNamesContractResolver();
+            client.JsonSerializerOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
             var query = new CypherFluentQuery(client)
                 .Return(a => a.As<Commodity>().Name)
                 .Query;
@@ -376,7 +377,7 @@ namespace Neo4jClient.Tests.Cypher
         public void ShouldUseProjectionResultModeForNamedObjectReturnCamel()
         {
             var client = Substitute.For<IRawGraphClient>();
-            client.JsonContractResolver = new CamelCasePropertyNamesContractResolver();
+            client.JsonSerializerOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
             var query = new CypherFluentQuery(client)
                 .Return(a => new ProjectionResult { Commodity = a.As<Commodity>() })
                 .Query;

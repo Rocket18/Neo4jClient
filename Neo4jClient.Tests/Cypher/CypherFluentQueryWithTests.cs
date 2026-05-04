@@ -1,7 +1,8 @@
-﻿using System;
+using System;
 using Neo4jClient.Cypher;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Serialization;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
 using NSubstitute;
 using Xunit;
 
@@ -111,7 +112,7 @@ namespace Neo4jClient.Tests.Cypher
         public void ShouldReturnSpecificPropertyOnItsOwnCamelAs()
         {
             var client = Substitute.For<IRawGraphClient>();
-            client.JsonContractResolver = new CamelCasePropertyNamesContractResolver();
+            client.JsonSerializerOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
             var query = new CypherFluentQuery(client)
                 .With(a => new Commodity(){ Name = a.As<Commodity>().Name})
                 .Query;
@@ -123,7 +124,7 @@ namespace Neo4jClient.Tests.Cypher
         public void ShouldReturnSpecificPropertyOnItsOwnCamel()
         {
             var client = Substitute.For<IRawGraphClient>();
-            client.JsonContractResolver = new CamelCasePropertyNamesContractResolver();
+            client.JsonSerializerOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
             var query = new CypherFluentQuery(client)
                 .With(a => a.As<Commodity>().Name)
                 .Query;
@@ -218,7 +219,7 @@ namespace Neo4jClient.Tests.Cypher
 
         class FooWithJsonProperties
         {
-            [JsonProperty("bar")]
+            [JsonPropertyName("bar")]
             public string Bar { get; set; }
         }
         public class Commodity

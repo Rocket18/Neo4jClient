@@ -36,7 +36,8 @@ namespace Neo4jClient.Execution
                 var readTask = response.Content.ReadAsStringAsync();
                 readTask.Wait();
                 var rawContent = readTask.Result;
-                rawBody = string.Format("\r\n\r\nThe response from Neo4j (which might include useful detail!) was: {0}", rawContent);
+                if (!string.IsNullOrEmpty(rawContent))
+                    rawBody = string.Format("\r\n\r\nThe response from Neo4j (which might include useful detail!) was: {0}", rawContent);
             }
 
             throw new Exception(string.Format(

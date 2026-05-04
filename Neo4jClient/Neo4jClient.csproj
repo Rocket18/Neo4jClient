@@ -20,8 +20,8 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <PackageReference Include="Neo4j.Driver.Signed" Version="5.27.0" />
-      <PackageReference Include="System.Text.Json" Version="9.0.5" />
+      <PackageReference Include="Neo4j.Driver.Signed" Version="5.28.4" />
+      <PackageReference Include="System.Text.Json" Version="10.0.7" />
     </ItemGroup>
 
     <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.0'">

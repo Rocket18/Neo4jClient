@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
@@ -8,7 +8,9 @@ using Moq;
 using Neo4j.Driver;
 using Neo4jClient.ApiModels.Cypher;
 using Neo4jClient.Cypher;
-using Newtonsoft.Json.Serialization;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
 using Xunit;
 
 namespace Neo4jClient.Tests.BoltGraphClientTests.Cypher
@@ -782,7 +784,7 @@ namespace Neo4jClient.Tests.BoltGraphClientTests.Cypher
                 testHarness.SetupCypherRequestResponse(cypherQuery.QueryText, cypherQuery.QueryParameters, testStatementResult);
 
                 var graphClient = await testHarness.CreateAndConnectBoltGraphClient();
-                graphClient.JsonContractResolver = new CamelCasePropertyNamesContractResolver();
+                graphClient.JsonSerializerOptions = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
                 var results = (await graphClient.ExecuteGetCypherResultsAsync<PathsResultBolt>(cypherQuery)).ToArray();
 
                 //Assert

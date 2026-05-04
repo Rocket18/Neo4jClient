@@ -69,43 +69,53 @@ namespace Neo4jClient
             var type = value.GetType();
             var typeInfo = type.GetTypeInfo();
 
-            if (type == typeof(DateTimeOffset))
-                return value;
-
-            if (type == typeof(DateTime))
-            {
-                var dt = (DateTime)value;
-                if (dt.Kind == DateTimeKind.Utc)
-                    return new DateTimeOffset(dt, TimeSpan.Zero);
-            }
-
-#if NET6_0_OR_GREATER
-            if (type == typeof(DateOnly))
-            {
-                var d = (DateOnly)value;
-                return new LocalDate(d.Year, d.Month, d.Day);
-            }
-#endif
-
-            var converter = converters?.FirstOrDefault(c => c.CanConvert(type));
-            if (converter != null)
-            {
-                var serializer = new CustomJsonSerializer { JsonConverters = converters, JsonSerializerOptions = ((IRawGraphClient)gc).JsonSerializerOptions };
-                var json = serializer.Serialize(new { value });
-                var helper = JsonSerializer.Deserialize<CustomJsonConverterHelper>(json, gc.JsonSerializerOptions ?? GraphClient.DefaultJsonSerializerOptions);
-                return helper?.Value;
-            }
-            
-            // check if it is a date time object and the bolt driver has native date time objects enabled
-            if (((gc as IBoltGraphClient)?.UseDriverDateTypes ?? false) && CanHandleNativeDateTimeType(type))
-            {
-                // the driver will take care of serialization
-                return value;
-            }
-
+            // [Neo4jDateTime] on a property means pass the raw value directly to the driver
             if (customAttributes != null && customAttributes.Any(x => x.AttributeType == typeof(Neo4jDateTimeAttribute)))
             {
                 return value;
+            }
+
+            // The built-in LocalDateTimeConverter and ZonedDateTimeConverter are JsonConverterFactory
+            // instances that handle DateTime/DateTimeOffset for *deserialization* of Neo4j driver types.
+            // When serializing parameters we must not let them intercept plain .NET DateTime/DateTimeOffset
+            // values — their "o" format includes trailing zeros that break equality checks.
+            // User-supplied non-factory converters (e.g. JsonConverter<DateTime>) should still be applied.
+            var converter = converters?.FirstOrDefault(c =>
+                c.CanConvert(type) &&
+                !(c is JsonConverterFactory &&
+                  (type == typeof(DateTime) || type == typeof(DateTimeOffset) ||
+                   type == typeof(DateTime?) || type == typeof(DateTimeOffset?))));
+            if (converter != null)
+            {
+                try
+                {
+                    var serializer = new CustomJsonSerializer { JsonConverters = converters, JsonSerializerOptions = ((IRawGraphClient)gc).JsonSerializerOptions };
+                    var json = serializer.Serialize(new { value });
+                    var helper = JsonSerializer.Deserialize<CustomJsonConverterHelper>(json, gc.JsonSerializerOptions ?? GraphClient.DefaultJsonSerializerOptions);
+                    var result = helper?.Value;
+                    // STJ deserializes numbers/strings into JsonElement when the target type is object — unwrap to CLR types
+                    if (result is JsonElement je)
+                        return UnwrapJsonElement(je);
+                    return result;
+                }
+                catch (NotImplementedException)
+                {
+                    // converter is read-only (Write throws NotImplementedException) — fall through to normal serialization
+                }
+            }
+
+            if (type == typeof(DateTimeOffset))
+            {
+                if ((gc as IBoltGraphClient)?.UseDriverDateTypes ?? false)
+                    return value;
+                return SerializeDateTimeOffset((DateTimeOffset)value);
+            }
+
+            if (type == typeof(DateTime))
+            {
+                if ((gc as IBoltGraphClient)?.UseDriverDateTypes ?? false)
+                    return value;
+                return SerializeDateTime((DateTime)value);
             }
 
             if (typeInfo.IsGenericType && type.GetGenericTypeDefinition() == typeof(Dictionary<,>))
@@ -130,7 +140,27 @@ namespace Neo4jClient
         {
             return type == typeof(DateTime) || type == typeof(DateTimeOffset) || type == typeof(TimeSpan);
         }
-        
+
+        private static object UnwrapJsonElement(JsonElement je)
+        {
+            switch (je.ValueKind)
+            {
+                case JsonValueKind.True:
+                    return true;
+                case JsonValueKind.False:
+                    return false;
+                case JsonValueKind.String:
+                    return je.GetString();
+                case JsonValueKind.Number:
+                    long l;
+                    if (je.TryGetInt64(out l))
+                        return l;
+                    return je.GetDouble();
+                default:
+                    return je;
+            }
+        }
+
         private static object SerializeObject(Type type, object value, IList<JsonConverter> converters, IGraphClient gc)
         {
             var serialized = new Dictionary<string, object>();

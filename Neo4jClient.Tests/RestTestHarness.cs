@@ -200,7 +200,7 @@ namespace Neo4jClient.Tests
 
             var httpResponse = new HttpResponseMessage
             {
-                StatusCode = response.StatusCode, ReasonPhrase = response.StatusDescription, Content = string.IsNullOrEmpty(response.Content) ? null : new StringContent(response.Content, null, response.ContentType)
+                StatusCode = response.StatusCode, ReasonPhrase = response.StatusDescription, Content = string.IsNullOrEmpty(response.Content) ? null : new StringContent(NormalizeResponseJson(response.Content), null, response.ContentType)
             };
 
             if (string.IsNullOrEmpty(response.Location))
@@ -217,6 +217,15 @@ namespace Neo4jClient.Tests
             lhs = NormalizeJson(lhs);
             rhs = NormalizeJson(rhs);
             return lhs == rhs;
+        }
+
+        /// <summary>
+        /// Converts single-quoted JSON (Newtonsoft-style test fixtures) to standard double-quoted JSON
+        /// without stripping whitespace — safe for use as HTTP response bodies with STJ.
+        /// </summary>
+        private static string NormalizeResponseJson(string input)
+        {
+            return input.Replace("'", "\"");
         }
 
         private static string NormalizeJson(string input)

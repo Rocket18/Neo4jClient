@@ -21,21 +21,32 @@ namespace Neo4jClient.Serialization
             IgnoreNullValues = true;
         }
 
+        private static readonly Neo4jContractResolver _contractResolver = new Neo4jContractResolver();
+
         private JsonSerializerOptions BuildOptions()
         {
-            var options = JsonSerializerOptions != null
-                ? new JsonSerializerOptions(JsonSerializerOptions)
-                : new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true,
-                    DefaultIgnoreCondition = IgnoreNullValues
-                        ? JsonIgnoreCondition.WhenWritingNull
-                        : JsonIgnoreCondition.Never,
-                };
+            bool camelCase = JsonSerializerOptions?.PropertyNamingPolicy == JsonNamingPolicy.CamelCase;
 
-            if (JsonConverters != null)
-                foreach (var c in JsonConverters.Reverse())
-                    options.Converters.Add(c);
+            // Build via the contract resolver so [Neo4jIgnore] is always honoured.
+            var options = _contractResolver.BuildOptions(
+                extraConverters: JsonConverters?.Reverse(),
+                camelCase: camelCase,
+                ignoreNulls: IgnoreNullValues);
+
+            // Forward any non-default settings from the caller-supplied options.
+            if (JsonSerializerOptions != null)
+            {
+                options.WriteIndented = JsonSerializerOptions.WriteIndented;
+                options.Encoder = JsonSerializerOptions.Encoder;
+                // Add any converters the caller registered that the contract resolver didn't add.
+                foreach (var c in JsonSerializerOptions.Converters)
+                    if (!options.Converters.Contains(c))
+                        options.Converters.Add(c);
+            }
+            else
+            {
+                options.WriteIndented = true;
+            }
 
             return options;
         }

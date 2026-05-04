@@ -450,8 +450,10 @@ namespace Neo4jClient
             if (response.ResponseObject?.Content != null)
             {
                 var responseString = await response.ResponseObject.Content.ReadAsStringAsync().ConfigureAwait(false);
+                if (!string.IsNullOrWhiteSpace(responseString))
+                {
                 var errors = JsonSerializer.Deserialize<ErrorsContainer>(responseString);
-                if(errors.Errors.Any())
+                if(errors?.Errors?.Any() == true)
                     throw new ClientException(errors.Errors.First().Code, errors.Errors.First().Message);
 
                 if (query.IncludeQueryStats)
@@ -459,6 +461,7 @@ namespace Neo4jClient
                     var statsContainer = JsonSerializer.Deserialize<QueryStatsContainer>(responseString);
                     if (statsContainer != null)
                         stats = statsContainer?.Results?.FirstOrDefault()?.Stats;
+                }
                 }
             }
 
@@ -478,6 +481,7 @@ namespace Neo4jClient
 
         private class ErrorsContainer
         {
+            [JsonPropertyName("errors")]
             public IList<Error> Errors { get; set; }
         }
 
