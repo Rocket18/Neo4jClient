@@ -108,6 +108,7 @@ await client.ConnectAsync();
 
 ## Original Package
 
+You can find package: [Neo4jClient.Memgraph](https://www.nuget.org/packages/Neo4jClient.Memgraph)
 The upstream project this is forked from: [DotNet4Neo4j/Neo4jClient](https://github.com/DotNet4Neo4j/Neo4jClient)
 
 ---
