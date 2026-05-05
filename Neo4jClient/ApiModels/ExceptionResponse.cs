@@ -1,19 +1,19 @@
-﻿using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 
 namespace Neo4jClient.ApiModels
 {
     internal class ExceptionResponse
     {
-        [JsonProperty("message")]
+        [JsonPropertyName("message")]
         public string Message { get; set; }
 
-        [JsonProperty("exception")]
+        [JsonPropertyName("exception")]
         public string Exception { get; set; }
 
-        [JsonProperty("fullname")]
+        [JsonPropertyName("fullname")]
         public string FullName { get; set; }
 
-        [JsonProperty("stacktrace")]
+        [JsonPropertyName("stacktrace")]
         public string[] StackTrace { get; set; }
     }
 }

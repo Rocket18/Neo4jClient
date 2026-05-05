@@ -91,7 +91,7 @@ namespace Neo4jClient.Tests
 
             var mockSession = new Mock<IAsyncSession>(MockBehavior.Loose);
             mockSession
-                .Setup(s => s.RunAsync("CALL dbms.components()", null))
+                .Setup(s => s.RunAsync("CALL dbms.components()  YIELD name, versions", null))
                 .Returns(Task.FromResult<IResultCursor>(new BoltGraphClientTests.BoltGraphClientTests.ServerInfo()));
             mockSession
                 .Setup(s => s.RunAsync(It.IsAny<string>(), It.IsAny<IDictionary<string, object>>(), null))

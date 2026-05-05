@@ -1,8 +1,8 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using Newtonsoft.Json.Serialization;
+using System.Text.Json;
 using System.Collections;
 using System.Collections.Specialized;
 using System.ComponentModel.DataAnnotations;
@@ -112,7 +112,7 @@ namespace Neo4jClient.Cypher
         {
             Client = client as IRawGraphClient ?? throw new ArgumentException("The supplied graph client also needs to implement IRawGraphClient", nameof(client));
             QueryWriter = queryWriter;
-            CamelCaseProperties = Client.JsonContractResolver is CamelCasePropertyNamesContractResolver;
+            CamelCaseProperties = Client.JsonSerializerOptions?.PropertyNamingPolicy == JsonNamingPolicy.CamelCase;
             Advanced = new CypherFluentQueryAdvanced(Client, QueryWriter, isWrite, includeQueryStats);
             IsWrite = isWrite;
             IncludeQueryStats = includeQueryStats;
@@ -277,19 +277,23 @@ namespace Neo4jClient.Cypher
                 return parameters.ToDictionary(x => x.Key, x => x.Value);
             }
 
-            int parameterNumber = rebaseFrom;
-            int maxParamNumber = parameters.Count;
-
+            // Build a mapping from old param name → new param name
+            var renameMap = new Dictionary<string, string>();
             var output = new Dictionary<string, object>();
-            
-            for(int i = maxParamNumber; i >= parameterNumber && i > 0; i--)
+            var parameterNumber = rebaseFrom;
+            foreach (var parameter in parameters)
             {
-                var parameter = parameters[i-1];
-                var newP = $"p{i}";
-                var regex = string.Format(regexFormat, parameter.Key);
+                var newP = $"p{parameterNumber++}";
+                renameMap[parameter.Key] = newP;
                 output.Add(newP, parameter.Value);
-                storedProcedureText = Regex.Replace(storedProcedureText, regex, $@"${{start}}${newP}${{end}}");
             }
+
+            // Replace all old param references in one pass using a MatchEvaluator to avoid
+            // collisions where a new name matches an old name in a subsequent iteration.
+            var allOldKeysPattern = string.Join("|", renameMap.Keys.Select(k => Regex.Escape(k)));
+            var combinedRegex = new Regex($@"(?<start>^|[\s\(])\$(?<param>{allOldKeysPattern})(?<end>$|[\s\)])");
+            storedProcedureText = combinedRegex.Replace(storedProcedureText, m =>
+                m.Groups["start"].Value + "$" + renameMap[m.Groups["param"].Value] + m.Groups["end"].Value);
 
             newStoredProcText = storedProcedureText;
             return output;
@@ -476,7 +480,7 @@ namespace Neo4jClient.Cypher
                 w.AppendToClause($", {string.Join(" DESC, ", properties)} DESC"));
         }
 
-        public CypherQuery Query => QueryWriter.ToCypherQuery(Client.JsonContractResolver ?? GraphClient.DefaultJsonContractResolver, IsWrite, IncludeQueryStats);
+        public CypherQuery Query => QueryWriter.ToCypherQuery(Client.JsonSerializerOptions ?? GraphClient.DefaultJsonSerializerOptions, IsWrite, IncludeQueryStats);
 
         public Task ExecuteWithoutResultsAsync()
         {

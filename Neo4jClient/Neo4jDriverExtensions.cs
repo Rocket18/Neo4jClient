@@ -4,12 +4,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Globalization;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 using Neo4j.Driver;
 using Neo4jClient.Cypher;
 using Neo4jClient.Serialization;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Serialization;
 
 namespace Neo4jClient
 {
@@ -64,32 +64,61 @@ namespace Neo4jClient
 
         private static object Serialize(object value, IList<JsonConverter> converters, IGraphClient gc, IEnumerable<CustomAttributeData> customAttributes = null)
         {
-            if (value == null)
-            {
-                return null;
-            }
+            if (value == null) return null;
 
             var type = value.GetType();
             var typeInfo = type.GetTypeInfo();
 
-            var converter = converters.FirstOrDefault(c => c.CanConvert(type) && c.CanWrite);
-            if (converter != null)
-            {
-                var serializer = new CustomJsonSerializer{JsonConverters = converters, JsonContractResolver = ((IRawGraphClient)gc).JsonContractResolver};
-                return JsonConvert.DeserializeObject<CustomJsonConverterHelper>(serializer.Serialize(new {value})).Value;
-            }
-            
-            // check if it is a date time object and the bolt driver has native date time objects enabled
-            if (((gc as IBoltGraphClient)?.UseDriverDateTypes ?? false) && CanHandleNativeDateTimeType(type))
-            {
-                // the driver will take care of serialization
-                return value;
-            }
-
+            // [Neo4jDateTime] on a property means pass the raw value directly to the driver
             if (customAttributes != null && customAttributes.Any(x => x.AttributeType == typeof(Neo4jDateTimeAttribute)))
             {
                 return value;
             }
+
+            // The built-in LocalDateTimeConverter and ZonedDateTimeConverter are JsonConverterFactory
+            // instances that handle DateTime/DateTimeOffset for *deserialization* of Neo4j driver types.
+            // When serializing parameters we must not let them intercept plain .NET DateTime/DateTimeOffset
+            // values — their "o" format includes trailing zeros that break equality checks.
+            // User-supplied non-factory converters (e.g. JsonConverter<DateTime>) should still be applied.
+            var converter = converters?.FirstOrDefault(c =>
+                c.CanConvert(type) &&
+                !(c is JsonConverterFactory && IsBuiltInDateType(type)));
+            if (converter != null)
+            {
+                try
+                {
+                    var serializer = new CustomJsonSerializer { JsonConverters = converters, JsonSerializerOptions = ((IRawGraphClient)gc).JsonSerializerOptions };
+                    var json = serializer.Serialize(new { value });
+                    var helper = JsonSerializer.Deserialize<CustomJsonConverterHelper>(json, gc.JsonSerializerOptions ?? GraphClient.DefaultJsonSerializerOptions);
+                    var result = helper?.Value;
+                    // STJ deserializes numbers/strings into JsonElement when the target type is object — unwrap to CLR types
+                    if (result is JsonElement je)
+                        return UnwrapJsonElement(je);
+                    return result;
+                }
+                catch (NotImplementedException)
+                {
+                    // converter is read-only (Write throws NotImplementedException) — fall through to normal serialization
+                }
+            }
+
+            if (type == typeof(DateTimeOffset))
+            {
+                return new ZonedDateTime((DateTimeOffset)value);
+            }
+
+            if (type == typeof(DateTime))
+            {
+                return new LocalDateTime((DateTime)value);
+            }
+
+#if NET6_0_OR_GREATER
+            if (type == typeof(DateOnly))
+            {
+                var d = (DateOnly)value;
+                return new LocalDate(d.Year, d.Month, d.Day);
+            }
+#endif
 
             if (typeInfo.IsGenericType && type.GetGenericTypeDefinition() == typeof(Dictionary<,>))
             {
@@ -113,33 +142,62 @@ namespace Neo4jClient
         {
             return type == typeof(DateTime) || type == typeof(DateTimeOffset) || type == typeof(TimeSpan);
         }
-        
+
+        private static bool IsBuiltInDateType(Type type)
+        {
+            if (type == typeof(DateTime) || type == typeof(DateTimeOffset) ||
+                type == typeof(DateTime?) || type == typeof(DateTimeOffset?))
+                return true;
+#if NET6_0_OR_GREATER
+            if (type == typeof(DateOnly) || type == typeof(DateOnly?))
+                return true;
+#endif
+            return false;
+        }
+
+        private static object UnwrapJsonElement(JsonElement je)
+        {
+            switch (je.ValueKind)
+            {
+                case JsonValueKind.True:
+                    return true;
+                case JsonValueKind.False:
+                    return false;
+                case JsonValueKind.String:
+                    return je.GetString();
+                case JsonValueKind.Number:
+                    long l;
+                    if (je.TryGetInt64(out l))
+                        return l;
+                    return je.GetDouble();
+                default:
+                    return je;
+            }
+        }
+
         private static object SerializeObject(Type type, object value, IList<JsonConverter> converters, IGraphClient gc)
         {
             var serialized = new Dictionary<string, object>();
             foreach (var propertyInfo in type.GetProperties(BindingFlags.Instance | BindingFlags.Public)
                 .Where(pi => !(pi.GetIndexParameters().Any() || pi.IsDefined(typeof(JsonIgnoreAttribute)) || pi.IsDefined(typeof(Neo4jIgnoreAttribute)))))
             {
-                var propertyName = GetPropertyName(propertyInfo.Name, gc, type);
+                var propertyName = GetPropertyName(propertyInfo, gc);
                 var propertyValue = propertyInfo.GetValue(value);
-
                 if (propertyValue != null || gc.ExecutionConfiguration.SerializeNullValues)
-                {
                     serialized.Add(propertyName, Serialize(propertyValue, converters, gc, propertyInfo.CustomAttributes));
-                }
             }
-            
             return serialized;
         }
 
-        private static string GetPropertyName(string argName, IGraphClient gc, Type type)
+        private static string GetPropertyName(PropertyInfo propertyInfo, IGraphClient gc)
         {
-            var jsonObjectContract = gc?.JsonContractResolver?.ResolveContract(type) as JsonObjectContract;
-            var property = jsonObjectContract?.Properties.SingleOrDefault(x => x.UnderlyingName == argName);
-            if (property != null)
-                return property.PropertyName ?? argName;
+            // Check [JsonPropertyName] first
+            var attr = propertyInfo.GetCustomAttribute<System.Text.Json.Serialization.JsonPropertyNameAttribute>();
+            if (attr != null) return attr.Name;
 
-            return argName;
+            // Fall back to JsonSerializerOptions naming policy (e.g. camelCase)
+            var policy = gc?.JsonSerializerOptions?.PropertyNamingPolicy;
+            return policy != null ? policy.ConvertName(propertyInfo.Name) : propertyInfo.Name;
         }
 
         private static object SerializeCollection(IEnumerable value, IList<JsonConverter> converters, IGraphClient gc)
@@ -151,13 +209,21 @@ namespace Neo4jClient
         {
             if (type == typeof(DateTime))
             {
-                return SerializeDateTime((DateTime) instance);
+                return new LocalDateTime((DateTime)instance);
             }
 
             if (type == typeof(DateTimeOffset))
             {
-                return SerializeDateTimeOffset((DateTimeOffset) instance);
+                return new ZonedDateTime((DateTimeOffset)instance);
             }
+
+#if NET6_0_OR_GREATER
+            if (type == typeof(DateOnly))
+            {
+                var d = (DateOnly)instance;
+                return new LocalDate(d.Year, d.Month, d.Day);
+            }
+#endif
 
             if (type == typeof(TimeSpan))
             {
@@ -175,17 +241,17 @@ namespace Neo4jClient
             }
 
             // last case scenario serialize it as JSON
-            return JsonConvert.SerializeObject(instance);
+            return JsonSerializer.Serialize(instance);
         }
 
-        private static string SerializeDateTime(DateTime dateTime)
+        private static LocalDateTime SerializeDateTime(DateTime dateTime)
         {
-             return dateTime.ToString(DefaultDateTimeFormat, CultureInfo.CurrentCulture);
+            return new LocalDateTime(dateTime);
         }
 
-        private static string SerializeDateTimeOffset(DateTimeOffset dateTime)
+        private static ZonedDateTime SerializeDateTimeOffset(DateTimeOffset dateTime)
         {
-            return dateTime.ToString(DefaultDateTimeFormat, CultureInfo.CurrentCulture);
+            return new ZonedDateTime(dateTime);
         }
 
         private static string SerializeTimeSpan(TimeSpan timeSpan)
@@ -197,23 +263,16 @@ namespace Neo4jClient
         {
             var keyType = type.GetGenericArguments()[0];
             if (keyType != typeof(string))
-            {
-                throw new NotSupportedException(
-                    $"Dictionary had keys with type '{keyType.Name}'. Only dictionaries with type '{nameof(String)}' are supported.");
-            }
+                throw new NotSupportedException($"Dictionary had keys with type '{keyType.Name}'. Only dictionaries with type 'String' are supported.");
 
             var serialized = new Dictionary<string, object>();
-            foreach (var item in (dynamic) value)
+            foreach (var item in (dynamic)value)
             {
                 string key = item.Key;
                 object entry = item.Value;
-
                 if (entry != null || gc.ExecutionConfiguration.SerializeNullValues)
-                {
                     serialized[key] = Serialize(entry, converters, gc);
-                }
             }
-
             return serialized;
         }
     }

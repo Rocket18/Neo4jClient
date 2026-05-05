@@ -1,7 +1,9 @@
-﻿using System;
+using System;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using FluentAssertions;
 using Neo4jClient.Cypher;
-using Newtonsoft.Json.Serialization;
+
 using NSubstitute;
 using Xunit;
 
@@ -150,12 +152,7 @@ namespace Neo4jClient.Tests.Cypher
 
             // Assert
             Assert.Equal("MATCH n" +
-                            Environment.NewLine + "CREATE UNIQUE n-[:X]-(leaf {" +
-                            Environment.NewLine + "  Id: 123," +
-                            Environment.NewLine + "  Name: \"Bar\"," +
-                            Environment.NewLine + "  Currency: 12.143," +
-                            Environment.NewLine + "  CamelCaseProperty: \"Foo\"" +
-                            Environment.NewLine + "})", query.DebugQueryText);
+                            Environment.NewLine + "CREATE UNIQUE n-[:X]-(leaf {\"Id\":123,\"Name\":\"Bar\",\"Currency\":12.143,\"CamelCaseProperty\":\"Foo\"})", query.DebugQueryText);
             Assert.Equal(1, query.QueryParameters.Count);
         }
 
@@ -176,7 +173,7 @@ namespace Neo4jClient.Tests.Cypher
         {
             // Arrange
             var client = Substitute.For<IRawGraphClient>();
-            client.JsonContractResolver.Returns(new CamelCasePropertyNamesContractResolver());
+            client.JsonSerializerOptions.Returns(new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
 
             // Act
             var query = new CypherFluentQuery(client)
@@ -187,12 +184,7 @@ namespace Neo4jClient.Tests.Cypher
 
             // Assert
             Assert.Equal("MATCH n" +
-                            Environment.NewLine + "CREATE UNIQUE n-[:X]-(leaf {" +
-                            Environment.NewLine + "  id: 123," +
-                            Environment.NewLine + "  name: \"Bar\"," +
-                            Environment.NewLine + "  currency: 12.143," +
-                            Environment.NewLine + "  camelCaseProperty: \"Foo\"" +
-                            Environment.NewLine + "})", query.DebugQueryText);
+                            Environment.NewLine + "CREATE UNIQUE n-[:X]-(leaf {\"id\":123,\"name\":\"Bar\",\"currency\":12.143,\"camelCaseProperty\":\"Foo\"})", query.DebugQueryText);
             Assert.Equal(1, query.QueryParameters.Count);
         }
     }

@@ -1,7 +1,8 @@
-﻿using System;
+using System;
 using System.Linq;
 using Neo4jClient.Extensions;
-using Newtonsoft.Json;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Xunit;
 
 namespace Neo4jClient.Tests.Extensions
@@ -11,10 +12,10 @@ namespace Neo4jClient.Tests.Extensions
     {
         class Foo
         {
-            [JsonProperty]
+            [System.Text.Json.Serialization.JsonInclude]
             public string Property1 { get; set; }
 
-            [JsonProperty("property_2")]
+            [JsonPropertyName("property_2")]
             public string Property2 { get; set; }
 
             public string Property3 { get; set; }

@@ -1,12 +1,13 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using FluentAssertions;
 using Moq;
 using Neo4jClient.Cypher;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.Json.Nodes;
 using Xunit;
 
 namespace Neo4jClient.Tests.Extensions
@@ -36,20 +37,13 @@ namespace Neo4jClient.Tests.Extensions
         public string String { get; set; }
     }
 
-    internal class ClassWithStringReadOnlyConverter : JsonConverter<ClassWithString>
+    internal class ClassWithStringReadOnlyConverter : System.Text.Json.Serialization.JsonConverter<ClassWithString>
     {
-        public override bool CanRead => true;
-        public override ClassWithString ReadJson(JsonReader reader, Type objectType, ClassWithString existingValue, bool hasExistingValue, JsonSerializer serializer)
-        {
-            var jo = JObject.Load(reader);
-            return jo.ToObject<ClassWithString>();
-        }
+        public override ClassWithString Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+            => JsonSerializer.Deserialize<ClassWithString>(ref reader, options);
 
-        public override bool CanWrite => false;
-        public override void WriteJson(JsonWriter writer, ClassWithString value, JsonSerializer serializer)
-        {
-            throw new NotImplementedException();
-        }
+        public override void Write(Utf8JsonWriter writer, ClassWithString value, JsonSerializerOptions options)
+            => throw new NotImplementedException();
     }
 
     public class Neo4jDriverExtensionsTests
@@ -66,23 +60,15 @@ namespace Neo4jClient.Tests.Extensions
                 }
             }
 
-            private class NeoDateTimeSerializer : JsonConverter
+            private class NeoDateTimeSerializer : System.Text.Json.Serialization.JsonConverter<DateTime>
             {
-                public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
-                {
-                    var dt = (DateTime) value;
-                    var ticks = dt.ToUniversalTime().Ticks;
-                    writer.WriteValue(ticks);
-                }
+                public override DateTime Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+                    => throw new NotImplementedException();
 
-                public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
+                public override void Write(Utf8JsonWriter writer, DateTime value, JsonSerializerOptions options)
                 {
-                    throw new NotImplementedException();
-                }
-
-                public override bool CanConvert(Type objectType)
-                {
-                    return objectType == typeof(DateTime);
+                    var ticks = value.ToUniversalTime().Ticks;
+                    writer.WriteNumberValue(ticks);
                 }
             }
 
@@ -318,8 +304,8 @@ namespace Neo4jClient.Tests.Extensions
 
                 var actual = query.Query.ToNeo4jDriverParameters(mockGc.Object);
                 actual.Keys.Should().Contain("value");
-                // Upon regression, actual["value"] will be of type JObject
-                actual["value"].Should().NotBeOfType<JObject>();
+                // Upon regression, actual["value"] will be of type JsonObject
+                actual["value"].Should().NotBeOfType<System.Text.Json.Nodes.JsonObject>();
                 actual["value"].Should().BeOfType<Dictionary<string, object>>();
                 var serializedObj = (Dictionary<string, object>)actual["value"];
 

@@ -1,26 +1,26 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Linq;
-using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 
 namespace Neo4jClient.ApiModels
 {
     internal class RelationshipApiResponse<TData>
         where TData : class, new()
     {
-        [JsonProperty("self")]
+        [JsonPropertyName("self")]
         public string Self { get; set; }
 
-        [JsonProperty("start")]
+        [JsonPropertyName("start")]
         public string Start { get; set; }
 
-        [JsonProperty("end")]
+        [JsonPropertyName("end")]
         public string End { get; set; }
 
-        [JsonProperty("type")]
+        [JsonPropertyName("type")]
         public string TypeKey { get; set; }
 
-        [JsonProperty("data")]
+        [JsonPropertyName("data")]
         public TData Data { get; set; }
 
         public RelationshipInstance<TData> ToRelationshipInstance(IGraphClient client)

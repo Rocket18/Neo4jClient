@@ -1,8 +1,9 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using Neo4jClient.Serialization;
-using Newtonsoft.Json;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Xunit;
 
 namespace Neo4jClient.Tests.Serialization
@@ -26,27 +27,17 @@ namespace Neo4jClient.Tests.Serialization
             public TestValueA CustomValue { get; set; }
         }
 
-        public class TestValueAConverter : JsonConverter
+        public class TestValueAConverter : System.Text.Json.Serialization.JsonConverter<TestValueA>
         {
-            public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
+            public override TestValueA Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
             {
-                var typedValue = (TestValueA)value;
-                writer.WriteValue(typedValue.A + typedValue.B.ToString(CultureInfo.InvariantCulture));
+                var rawValue = reader.GetString();
+                return new TestValueA { A = rawValue[0], B = rawValue[1] };
             }
 
-            public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
+            public override void Write(Utf8JsonWriter writer, TestValueA value, JsonSerializerOptions options)
             {
-                var rawValue = reader.Value.ToString();
-                return new TestValueA
-                {
-                    A = rawValue[0],
-                    B = rawValue[1]
-                };
-            }
-
-            public override bool CanConvert(Type objectType)
-            {
-                return typeof(TestValueA) == objectType;
+                writer.WriteStringValue(value.A + value.B.ToString(CultureInfo.InvariantCulture));
             }
         }
 
@@ -254,7 +245,7 @@ namespace Neo4jClient.Tests.Serialization
             var testNode = new TestNodeWithSomeNeo4jIgnoreAttributes { Text = "foo", TextIgnore = "fooignore", TestInt = 42, TestNeo4jIntIgnore = 42, TestJsonIntIgnore = 42 };
             var serializer = new CustomJsonSerializer
             {
-                NullHandling = NullValueHandling.Ignore,
+                IgnoreNullValues = true,
                 JsonConverters = GraphClient.DefaultJsonConverters
             };
 
@@ -272,7 +263,7 @@ namespace Neo4jClient.Tests.Serialization
         public void JsonDeserializeShouldAcceptDictionaryObjectValues()
         {
             // Arrange
-            string rawInput = "{'a': 'a', 'b': 42, 'c': true, 'd': 1.2345}";
+            string rawInput = "{\"a\": \"a\", \"b\": 42, \"c\": true, \"d\": 1.2345}";
 
             var serializer = new CustomJsonDeserializer(new JsonConverter[] { new TypeConverterBasedJsonConverter() });
 

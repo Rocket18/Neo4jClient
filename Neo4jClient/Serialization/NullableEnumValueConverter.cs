@@ -1,30 +1,45 @@
 using System;
-using System.Reflection;
-using Newtonsoft.Json;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Neo4jClient.Serialization
 {
-    public class NullableEnumValueConverter : JsonConverter
+    /// <summary>
+    /// A <see cref="JsonConverterFactory"/> that handles serialization of <see cref="Nullable{T}"/> enum types
+    /// by writing/reading the enum member name as a string, or null.
+    /// </summary>
+    public class NullableEnumValueConverter : JsonConverterFactory
     {
-        public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
+        public override bool CanConvert(Type typeToConvert)
         {
-            writer.WriteValue(value.ToString());
+            var underlying = Nullable.GetUnderlyingType(typeToConvert);
+            return underlying != null && underlying.IsEnum;
         }
 
-        public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
+        public override JsonConverter CreateConverter(Type typeToConvert, JsonSerializerOptions options)
         {
-            if (string.IsNullOrEmpty(reader.Value.ToString()))
-                return null;
-
-            var enumType = Nullable.GetUnderlyingType(objectType);
-            return Enum.Parse(enumType, reader.Value.ToString());
+            var enumType = Nullable.GetUnderlyingType(typeToConvert);
+            var converterType = typeof(NullableEnumValueConverterInner<>).MakeGenericType(enumType);
+            return (JsonConverter)Activator.CreateInstance(converterType);
         }
 
-        public override bool CanConvert(Type objectType)
+        private class NullableEnumValueConverterInner<T> : JsonConverter<T?> where T : struct, Enum
         {
-            return objectType.GetTypeInfo().IsGenericType &&
-                   objectType.GetGenericTypeDefinition() == typeof (Nullable<>) &&
-                   Nullable.GetUnderlyingType(objectType).GetTypeInfo().IsEnum;
+            public override T? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+            {
+                var value = reader.GetString();
+                if (string.IsNullOrEmpty(value))
+                    return null;
+                return (T)Enum.Parse(typeof(T), value);
+            }
+
+            public override void Write(Utf8JsonWriter writer, T? value, JsonSerializerOptions options)
+            {
+                if (value == null)
+                    writer.WriteNullValue();
+                else
+                    writer.WriteStringValue(value.ToString());
+            }
         }
     }
 }

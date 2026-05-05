@@ -1,12 +1,12 @@
-using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 
 namespace Neo4jClient
 {
     public class IndexConfiguration
     {
-        [JsonProperty("type")]
+        [JsonPropertyName("type")]
         public IndexType Type { get; set; }
-        [JsonProperty("provider")]
+        [JsonPropertyName("provider")]
         public IndexProvider Provider { get; set; }
     }
 }

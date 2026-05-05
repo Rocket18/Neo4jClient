@@ -6,7 +6,7 @@ using System.Linq.Expressions;
 using System.Reflection;
 using Neo4jClient.Extensions;
 using Neo4jClient.Serialization;
-using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 
 namespace Neo4jClient.Cypher
 {
@@ -354,11 +354,11 @@ namespace Neo4jClient.Cypher
 
         private static string ParseMemberName(MemberInfo memberInfo, bool camelCaseProperties)
         {
-            var att = memberInfo.GetCustomAttribute<JsonPropertyAttribute>();
+            var att = memberInfo.GetCustomAttribute<System.Text.Json.Serialization.JsonPropertyNameAttribute>();
 
-            if (att != null && !string.IsNullOrWhiteSpace(att.PropertyName))
+            if (att != null && !string.IsNullOrWhiteSpace(att.Name))
             {
-                return att.PropertyName;
+                return att.Name;
             }
 
             return CypherFluentQuery.ApplyCamelCase(camelCaseProperties, memberInfo.Name);
@@ -524,7 +524,7 @@ namespace Neo4jClient.Cypher
                 return true;
 
             jsonConvertersThatTheDeserializerWillUse = jsonConvertersThatTheDeserializerWillUse ?? GraphClient.DefaultJsonConverters;
-            if (jsonConvertersThatTheDeserializerWillUse.Any(c => c.CanConvert(type) && c.CanRead))
+            if (jsonConvertersThatTheDeserializerWillUse.Any(c => c.CanConvert(type)))
                 return true;
 
             var hasDefaultConstructor = type.GetConstructor(Type.EmptyTypes) != null;

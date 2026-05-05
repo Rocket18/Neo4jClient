@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Neo4j.Driver;
-using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 
 namespace Neo4jClient.Execution
 {

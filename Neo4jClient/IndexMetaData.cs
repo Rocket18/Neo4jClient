@@ -1,19 +1,19 @@
-using Newtonsoft.Json;
+using System.Text.Json.Serialization;
 
 namespace Neo4jClient
 {
     public class IndexMetaData
     {
-        [JsonProperty("to_lower_case")]
+        [JsonPropertyName("to_lower_case")]
         public bool ToLowerCase { get; set; }
 
-        [JsonProperty("template")]
+        [JsonPropertyName("template")]
         public string Template { get; set; }
 
-        [JsonProperty("provider")]
+        [JsonPropertyName("provider")]
         public string Provider { get; set; }
 
-        [JsonProperty("type")]
+        [JsonPropertyName("type")]
         public string Type { get; set; }
     }
 }

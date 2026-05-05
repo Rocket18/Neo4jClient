@@ -1,13 +1,12 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
-using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Neo4jClient.ApiModels;
 using Neo4jClient.Cypher;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 
 namespace Neo4jClient.Serialization
 {
@@ -58,24 +57,21 @@ namespace Neo4jClient.Serialization
                 var context = new DeserializationContext
                 {
                     Culture = culture,
-                    JsonConverters = Enumerable.Reverse(client.JsonConverters ?? new List<JsonConverter>(0)).ToArray(),
-                    JsonContractResolver = client.JsonContractResolver
+                    JsonConverters = Enumerable.Reverse(client.JsonConverters ?? new List<System.Text.Json.Serialization.JsonConverter>(0)).ToArray(),
+                    JsonSerializerOptions = client.JsonSerializerOptions
                 };
 
                 if(isHttp) content = CommonDeserializerMethods.RemoveResultsFromJson(content);
                 content = CommonDeserializerMethods.ReplaceAllDateInstancesWithNeoDates(content);
 
-                var reader = new JsonTextReader(new StringReader(content))
-                {
-                    DateParseHandling = DateParseHandling.None
-                };
+                var jsonOptions = new JsonDocumentOptions { AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip };
 
                 // Force the deserialization to happen now, not later, as there's
                 // not much value to deferred execution here and we'd like to know
                 // about any errors now
                 return inTransaction
-                    ? FullDeserializationFromTransactionResponse(reader, context, isHttp).ToArray()
-                    : DeserializeFromRoot(content, reader, context, isHttp).ToArray();
+                    ? FullDeserializationFromTransactionResponse(content, context, isHttp).ToArray()
+                    : DeserializeFromRoot(content, context, isHttp).ToArray();
             }
             catch (Exception ex)
             {
@@ -116,20 +112,15 @@ Include this raw JSON, with any sensitive values replaced with non-sensitive equ
             var context = new DeserializationContext
             {
                 Culture = culture,
-                JsonConverters = Enumerable.Reverse(client.JsonConverters ?? new List<JsonConverter>(0)).ToArray(),
-                JsonContractResolver = client.JsonContractResolver
+                JsonConverters = Enumerable.Reverse(client.JsonConverters ?? new List<System.Text.Json.Serialization.JsonConverter>(0)).ToArray(),
+                JsonSerializerOptions = client.JsonSerializerOptions
             };
             content = CommonDeserializerMethods.ReplaceAllDateInstancesWithNeoDates(content);
 
-            var reader = new JsonTextReader(new StringReader(content))
-            {
-                DateParseHandling = DateParseHandling.None
-            };
-            var root = JToken.ReadFrom(reader).Root;
+            var root = JsonNode.Parse(content);
 
-            var columnsArray = (JArray)root["columns"];
+            var columnsArray = root["columns"] as JsonArray;
             var columnNames = columnsArray
-                .Children()
                 .Select(c => c.AsString())
                 .ToArray();
 
@@ -177,13 +168,12 @@ Include this raw JSON, with any sensitive values replaced with non-sensitive equ
             }
         }
 
-        private IEnumerable<TResult> DeserializeResultSet(JToken resultRoot, DeserializationContext context, bool isHttp)
+        private IEnumerable<TResult> DeserializeResultSet(JsonNode resultRoot, DeserializationContext context, bool isHttp)
         {
-            var columnsArray = isHttp ? (JArray)resultRoot.SelectToken("$.results[0].columns") : (JArray)resultRoot["columns"];
-            if(columnsArray == null) //This is a hack prior to shifting the Bolt deserialization entirely away from this.
-                columnsArray = !isHttp ? (JArray)resultRoot.SelectToken("$.results[0].columns") : (JArray)resultRoot["columns"];
+            var columnsArray = isHttp ? resultRoot["results"]?[0]?["columns"] as JsonArray : resultRoot["columns"] as JsonArray;
+            if (columnsArray == null)
+                columnsArray = !isHttp ? resultRoot["results"]?[0]?["columns"] as JsonArray : resultRoot["columns"] as JsonArray;
             var columnNames = columnsArray
-                .Children()
                 .Select(c => c.AsString())
                 .ToArray();
 
@@ -239,34 +229,27 @@ Include this raw JSON, with any sensitive values replaced with non-sensitive equ
             }
         }
 
-        private string GetStringPropertyFromObject(JObject obj, string propertyName)
+        private string GetStringPropertyFromObject(JsonObject obj, string propertyName)
         {
-            if (obj.TryGetValue(propertyName, out var propValue))
-                return (string)(propValue as JValue);
-
+            if (obj.ContainsKey(propertyName))
+                return obj[propertyName]?.GetValue<string>();
             return null;
         }
 
-        private NeoException BuildNeoException(JToken error)
+        private NeoException BuildNeoException(JsonNode error)
         {
-            var errorObject = error as JObject;
+            var errorObject = error as JsonObject;
             var code = GetStringPropertyFromObject(errorObject, "code");
             if (code == null)
-            {
                 throw new InvalidOperationException("Expected 'code' property on error message");
-            }
 
             var message = GetStringPropertyFromObject(errorObject, "message");
             if (message == null)
-            {
                 throw new InvalidOperationException("Expected 'message' property on error message");
-            }
 
             var lastCodePart = code.Substring(code.LastIndexOf('.') + 1);
-
             return new NeoException(new ExceptionResponse
             {
-                // there is no stack trace in transaction error response
                 StackTrace = new string[] { },
                 Exception = lastCodePart,
                 FullName = code,
@@ -277,23 +260,16 @@ Include this raw JSON, with any sensitive values replaced with non-sensitive equ
         public PartialDeserializationContext CheckForErrorsInTransactionResponse(string content)
         {
             if (!inTransaction)
-            {
                 throw new InvalidOperationException("Deserialization of this type must be done inside of a transaction scope.");
-            }
 
             var context = new DeserializationContext
             {
                 Culture = culture,
-                JsonConverters = Enumerable.Reverse(client.JsonConverters ?? new List<JsonConverter>(0)).ToArray()
+                JsonConverters = Enumerable.Reverse(client.JsonConverters ?? new List<System.Text.Json.Serialization.JsonConverter>(0)).ToArray()
             };
             content = CommonDeserializerMethods.ReplaceAllDateInstancesWithNeoDates(content);
 
-            var reader = new JsonTextReader(new StringReader(content))
-            {
-                DateParseHandling =DateParseHandling.None// DateParseHandling.DateTimeOffset
-            };
-
-            var root = JToken.ReadFrom(reader).Root as JObject;
+            var root = JsonNode.Parse(content) as JsonObject;
 
             return new PartialDeserializationContext
             {
@@ -302,41 +278,20 @@ Include this raw JSON, with any sensitive values replaced with non-sensitive equ
             };
         }
 
-        private JToken GetRootResultInTransaction(JObject root)
+        private JsonNode GetRootResultInTransaction(JsonObject root)
         {
             if (root == null)
-            {
                 throw new InvalidOperationException("Root expected to be a JSON object.");
-            }
 
-            JToken rawErrors;
-            if (root.TryGetValue("errors", out rawErrors))
-            {
-                var errors = rawErrors as JArray;
-                if (errors == null)
-                {
-                    throw new InvalidOperationException("`errors` property expected to a JSON array.");
-                }
+            var rawErrors = root["errors"] as JsonArray;
+            if (rawErrors != null && rawErrors.Count > 0)
+                throw BuildNeoException(rawErrors[0]);
 
-                if (errors.Count > 0)
-                {
-                    throw BuildNeoException(errors.First());
-                }
-            }
-
-            JToken rawResults;
-            if (!root.TryGetValue("results", out rawResults))
-            {
+            var rawResults = root["results"] as JsonArray;
+            if (rawResults == null)
                 throw new InvalidOperationException("Expected `results` property on JSON root object");
-            }
 
-            var results = rawResults as JArray;
-            if (results == null)
-            {
-                throw new InvalidOperationException("`results` property expected to a JSON array.");
-            }
-
-            return results.FirstOrDefault();
+            return rawResults.Count > 0 ? rawResults[0] : null;
         }
 
         public IEnumerable<TResult> DeserializeFromTransactionPartialContext(PartialDeserializationContext context, bool isHttp)
@@ -351,36 +306,30 @@ This means no query was emitted, so a method that doesn't care about getting res
             return DeserializeResultSet(context.RootResult, context.DeserializationContext, isHttp);
         }
 
-        private IEnumerable<TResult> FullDeserializationFromTransactionResponse(JsonTextReader reader, DeserializationContext context, bool isHttp)
+        private IEnumerable<TResult> FullDeserializationFromTransactionResponse(string content, DeserializationContext context, bool isHttp)
         {
-            var root = JToken.ReadFrom(reader).Root as JObject;
-
-            // discarding all the results but the first
-            // (this won't affect the library because as of now there is no way of executing
-            // multiple statements in the same batch within a transaction and returning the results)
+            content = CommonDeserializerMethods.NormalizeSingleQuotedJson(content);
+            var root = JsonNode.Parse(content) as JsonObject;
             var resultSet = GetRootResultInTransaction(root);
             if (resultSet == null)
-            {
                 throw new InvalidOperationException(
                     @"`results` array should have one result set.
 This means no query was emitted, so a method that doesn't care about getting results should have been called."
                     );
-            }
             return DeserializeResultSet(resultSet, context, isHttp);
         }
 
-        IEnumerable<TResult> DeserializeFromRoot(string content, JsonTextReader reader, DeserializationContext context, bool isHttp)
+        IEnumerable<TResult> DeserializeFromRoot(string content, DeserializationContext context, bool isHttp)
         {
-            var root = JToken.ReadFrom(reader).Root;
-            if (!(root is JObject))
-            {
+            content = CommonDeserializerMethods.NormalizeSingleQuotedJson(content);
+            var root = JsonNode.Parse(content);
+            if (!(root is JsonObject))
                 throw new InvalidOperationException("Root expected to be a JSON object.");
-            }
             return DeserializeResultSet(root, context, isHttp);
         }
 
         // ReSharper disable UnusedParameter.Local
-        private IEnumerable<TResult> ParseInSingleColumnMode(DeserializationContext context, JToken root, string[] columnNames, TypeMapping[] jsonTypeMappings, bool isHttp)
+        private IEnumerable<TResult> ParseInSingleColumnMode(DeserializationContext context, JsonNode root, string[] columnNames, TypeMapping[] jsonTypeMappings, bool isHttp)
         // ReSharper restore UnusedParameter.Local
         {
             if (columnNames.Count() != 1)
@@ -393,58 +342,48 @@ This means no query was emitted, so a method that doesn't care about getting res
             var mapping = jsonTypeMappings.SingleOrDefault(m => m.ShouldTriggerForPropertyType(0, resultType));
             var newType = mapping == null ? resultType : mapping.DetermineTypeToParseJsonIntoBasedOnPropertyType(resultType);
 
-            var dataArray = isHttp ? (JArray)root.SelectToken("$.results[0].data") : (JArray)root["data"];
-            if(dataArray == null) //Hack prior to swapping out deserialization completely.
-                dataArray = !isHttp ? (JArray)root.SelectToken("$.results[0].data") : (JArray)root["data"];
-            var rows = dataArray.Children();
+            var dataArray = isHttp ? root["results"]?[0]?["data"] as JsonArray : root["data"] as JsonArray;
+            if (dataArray == null)
+                dataArray = !isHttp ? root["results"]?[0]?["data"] as JsonArray : root["data"] as JsonArray;
+            var rows = dataArray.ToList();
 
-            //var x = resultFormat == CypherResultFormat.Rest ? "rest" : "row";
             var dataPropertyNameInTransaction = "row";
             var results = rows.Select(row =>
                     {
                         if (inTransaction || isHttp)
-                            //All HTTP messages are now in txs -- This is a temporary measure.
                         {
-                            var rowObject = row as JObject;
+                            var rowObject = row as JsonObject;
                             if (rowObject == null)
                                 throw new InvalidOperationException("Expected the row to be a JSON object, but it wasn't.");
 
-                            if (!rowObject.TryGetValue(dataPropertyNameInTransaction, out var rowProperty))
+                            if (!rowObject.ContainsKey(dataPropertyNameInTransaction))
                                 throw new InvalidOperationException("There is no row property in the JSON object.");
 
-                            row = rowProperty;
+                            row = rowObject[dataPropertyNameInTransaction];
                         }
 
-                        if (!(row is JArray))
-                        {
-                            // no transaction mode and the row is not an array
+                        if (!(row is JsonArray))
                             throw new InvalidOperationException("Expected the row to be a JSON array of values, but it wasn't.");
-                        }
 
-                        var rowAsArray = (JArray) row;
+                        var rowAsArray = (JsonArray) row;
                         if (rowAsArray.Count > 1)
                             throw new InvalidOperationException($"Expected the row to only have a single array value, but it had {rowAsArray.Count}.");
 
                         return rowAsArray;
                     }
                 )
-                .Where(row => row.Count != 0) // No elements to parse
+                .Where(row => row.Count != 0)
                 .Select(row =>
                 {
                     var elementToParse = row[0];
-                    if (elementToParse is JObject)
+                    if (elementToParse is JsonObject elementObj)
                     {
-                        var propertyNames = ((JObject) elementToParse)
-                            .Properties()
-                            .Select(p => p.Name)
-                            .ToArray();
+                        var propertyNames = elementObj.Select(p => p.Key).ToArray();
                         var dataElementLooksLikeANodeOrRelationshipInstance =
                             new[] {"data", "self", "traverse", "properties"}.All(propertyNames.Contains);
                         if (!isResultTypeANodeOrRelationshipInstance &&
                             dataElementLooksLikeANodeOrRelationshipInstance)
-                        {
                             elementToParse = elementToParse["data"];
-                        }
                     }
 
                     var parsed = CommonDeserializerMethods.CreateAndMap(context, newType, elementToParse, jsonTypeMappings, 0);
@@ -454,26 +393,20 @@ This means no query was emitted, so a method that doesn't care about getting res
             return results;
         }
 
-        IEnumerable<TResult> ParseInProjectionMode(DeserializationContext context, JToken root, string[] columnNames, TypeMapping[] jsonTypeMappings, bool isHttp)
+        IEnumerable<TResult> ParseInProjectionMode(DeserializationContext context, JsonNode root, string[] columnNames, TypeMapping[] jsonTypeMappings, bool isHttp)
         {
             var properties = typeof(TResult).GetProperties();
-            var propertiesDictionary = properties
-                .ToDictionary(p => p.Name);
+            var propertiesDictionary = properties.ToDictionary(p => p.Name);
 
-
-            Func<JToken, TResult> getRow = null;
+            Func<JsonNode, TResult> getRow = null;
 
             var columnsWhichDontHaveSettableProperties = columnNames.Where(c => !propertiesDictionary.ContainsKey(c) || !propertiesDictionary[c].CanWrite).ToArray();
             if (columnsWhichDontHaveSettableProperties.Any())
             {
-                // See if there is a constructor that is compatible with all property types,
-                // which is the case for anonymous types...
                 var ctor = typeof(TResult).GetConstructors().FirstOrDefault(info =>
                 {
                     var parameters = info.GetParameters();
-                    if (parameters.Length != columnNames.Length)
-                        return false;
-
+                    if (parameters.Length != columnNames.Length) return false;
                     for (var i = 0; i < parameters.Length; i++)
                     {
                         var property = propertiesDictionary[columnNames[i]];
@@ -484,16 +417,12 @@ This means no query was emitted, so a method that doesn't care about getting res
                 });
 
                 if (ctor != null)
-                {
                     getRow = token => ReadProjectionRowUsingCtor(context, token, propertiesDictionary, columnNames, jsonTypeMappings, ctor);
-                }
 
                 if (getRow == null)
                 {
-                    // wasn't able to build TResult via constructor
-                    var columnsWhichDontHaveSettablePropertiesCommaSeparated = string.Join(", ", columnsWhichDontHaveSettableProperties);
-                    throw new ArgumentException($"The query response contains columns {columnsWhichDontHaveSettablePropertiesCommaSeparated} however {typeof(TResult).FullName} does not contain publicly settable properties to receive this data.",
-                        nameof(columnNames));
+                    var columnsCommaSeparated = string.Join(", ", columnsWhichDontHaveSettableProperties);
+                    throw new ArgumentException($"The query response contains columns {columnsCommaSeparated} however {typeof(TResult).FullName} does not contain publicly settable properties to receive this data.", nameof(columnNames));
                 }
             }
             else
@@ -501,99 +430,70 @@ This means no query was emitted, so a method that doesn't care about getting res
                 getRow = token => ReadProjectionRowUsingProperties(context, token, propertiesDictionary, columnNames, jsonTypeMappings);
             }
 
-            // var dataArray = (JArray)root["data"];
-            var dataArray = isHttp ? (JArray)root.SelectToken("$.results[0].data") : (JArray)root["data"];
-            if (dataArray == null) //Hack prior to swapping out deserialization completely.
-                dataArray = !isHttp ? (JArray)root.SelectToken("$.results[0].data") : (JArray)root["data"];
+            var dataArray = isHttp ? root["results"]?[0]?["data"] as JsonArray : root["data"] as JsonArray;
+            if (dataArray == null)
+                dataArray = !isHttp ? root["results"]?[0]?["data"] as JsonArray : root["data"] as JsonArray;
 
-            var rows = dataArray.Children();
-
-            //var dataPropertyNameInTransaction = resultFormat == CypherResultFormat.Rest ? "rest" : "row";
+            var rows = dataArray.ToList();
             var dataPropertyNameInTransaction = "row";
 
-            return inTransaction || isHttp ? rows.Select(row => row[dataPropertyNameInTransaction]).Select(getRow) : rows.Select(getRow);
+            return inTransaction || isHttp
+                ? rows.Select(row => row[dataPropertyNameInTransaction]).Select(getRow)
+                : rows.Select(getRow);
         }
 
         TResult ReadProjectionRowUsingCtor(
             DeserializationContext context,
-            JToken row,
+            JsonNode row,
             IDictionary<string, PropertyInfo> propertiesDictionary,
             IList<string> columnNames,
             IEnumerable<TypeMapping> jsonTypeMappings,
             ConstructorInfo ctor)
         {
-            var coercedValues = row
-                .Children()
+            var rowArray = row as JsonArray;
+            var coercedValues = rowArray
                 .Select((cell, cellIndex) =>
                 {
                     var columnName = columnNames[cellIndex];
                     var property = propertiesDictionary[columnName];
                     if (IsNullArray(property, cell)) return null;
-
-                    var coercedValue = CommonDeserializerMethods.CoerceValue(context, property, cell, jsonTypeMappings, 0);
-                    return coercedValue;
+                    return CommonDeserializerMethods.CoerceValue(context, property, cell, jsonTypeMappings, 0);
                 })
                 .ToArray();
 
-            var result = (TResult)ctor.Invoke(coercedValues);
-
-            return result;
+            return (TResult)ctor.Invoke(coercedValues);
         }
 
         TResult ReadProjectionRowUsingProperties(
             DeserializationContext context,
-            JToken row,
+            JsonNode row,
             IDictionary<string, PropertyInfo> propertiesDictionary,
             IList<string> columnNames,
             TypeMapping[] jsonTypeMappings)
         {
             var result = Activator.CreateInstance<TResult>();
-
+            var rowArray = row as JsonArray;
             var cellIndex = 0;
-            foreach (var cell in row.Children())
+            foreach (var cell in rowArray)
             {
-                var columnName = columnNames[cellIndex];
-                cellIndex++;
-
+                var columnName = columnNames[cellIndex++];
                 var property = propertiesDictionary[columnName];
-
-                var isNullArray = IsNullArray(property, cell);
-                if (isNullArray) continue;
-
+                if (IsNullArray(property, cell)) continue;
                 CommonDeserializerMethods.SetPropertyValue(context, result, property, cell, jsonTypeMappings, 0);
             }
-
             return result;
         }
 
-        static bool IsNullArray(PropertyInfo property, JToken cell)
+        static bool IsNullArray(PropertyInfo property, JsonNode cell)
         {
-            // Empty arrays in Cypher tables come back as things like [null] or [null,null]
-            // instead of just [] or null. We detect these scenarios and convert them to just
-            // null.
-
             var propertyType = property.PropertyType;
-
-            var isEnumerable =
-                propertyType.GetTypeInfo().IsGenericType &&
+            var isEnumerable = propertyType.GetTypeInfo().IsGenericType &&
                 propertyType.GetGenericTypeDefinition() == typeof(IEnumerable<>);
-
-            var isArrayOrEnumerable =
-                isEnumerable ||
-                propertyType.IsArray;
-
-            if (!isArrayOrEnumerable)
-                return false;
-
-            if (cell.Type != JTokenType.Array)
-                return false;
-
-            var cellChildren = cell.Children().ToArray();
-            var hasOneOrMoreChildrenAndAllAreNull =
-                cellChildren.Any() &&
-                cellChildren.All(c => c.Type == JTokenType.Null);
-
-            return hasOneOrMoreChildrenAndAllAreNull;
+            var isArrayOrEnumerable = isEnumerable || propertyType.IsArray;
+            if (!isArrayOrEnumerable) return false;
+            if (!(cell is JsonArray arr)) return false;
+            var children = arr.ToList();
+            return children.Any() && children.All(c => c == null || (c is JsonValue jv && jv.TryGetValue<object>(out var v) && v == null));
         }
     }
 }

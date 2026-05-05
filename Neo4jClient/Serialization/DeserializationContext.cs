@@ -1,6 +1,6 @@
 ﻿using System.Globalization;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Serialization;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Neo4jClient.Serialization
 {
@@ -8,6 +8,6 @@ namespace Neo4jClient.Serialization
     {
         public CultureInfo Culture { get; set; }
         public JsonConverter[] JsonConverters { get; set; }
-        public IContractResolver JsonContractResolver { get; set; }
+        public JsonSerializerOptions JsonSerializerOptions { get; set; }
     }
 }

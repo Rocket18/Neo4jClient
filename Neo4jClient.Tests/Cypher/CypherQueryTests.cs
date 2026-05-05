@@ -22,7 +22,7 @@ namespace Neo4jClient.Tests.Cypher
                 .WithParam("object", dummyObject)
                 .Query;
 
-            string expected = "MERGE (foo:Foo {" + Environment.NewLine + "  key: \"value\"" + Environment.NewLine + "})";
+            string expected = "MERGE (foo:Foo {\"key\":\"value\"})";
             Assert.Equal(expected, query.DebugQueryText);
 
             var dummyString = "value";

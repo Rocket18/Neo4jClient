@@ -1,23 +1,23 @@
-﻿using System.Collections.Generic;
-using Newtonsoft.Json;
+using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace Neo4jClient.ApiModels.Cypher
 {
     public class PathsResult
     {
-        [JsonProperty("start")]
+        [JsonPropertyName("start")]
         public string Start { get; set; }
 
-        [JsonProperty("nodes")]
+        [JsonPropertyName("nodes")]
         public List<string> Nodes { get; set; }
 
-        [JsonProperty("length")]
+        [JsonPropertyName("length")]
         public int Length { get; set; }
 
-        [JsonProperty("relationships")]
+        [JsonPropertyName("relationships")]
         public List<string> Relationships { get; set; }
 
-        [JsonProperty("end")]
+        [JsonPropertyName("end")]
         public string End { get; set; }
     }
 }

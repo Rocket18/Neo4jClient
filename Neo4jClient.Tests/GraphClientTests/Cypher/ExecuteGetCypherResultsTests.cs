@@ -702,8 +702,8 @@ namespace Neo4jClient.Tests.GraphClientTests.Cypher
                 var graphClient = await testHarness.CreateAndConnectGraphClient();
 
                 var ex = await Assert.ThrowsAsync<NeoException>(async () => await graphClient.ExecuteGetCypherResultsAsync<ResultWithRelationshipDto>(cypherQuery));
-                Assert.Equal("SyntaxException: expected START or CREATE\n'bad query'\n ^", ex.Message);
-                Assert.Equal("expected START or CREATE\n'bad query'\n ^", ex.NeoMessage);
+                Assert.Equal("SyntaxException: expected START or CREATE\n\"bad query\"\n ^", ex.Message);
+                Assert.Equal("expected START or CREATE\n\"bad query\"\n ^", ex.NeoMessage);
                 Assert.Equal("SyntaxException", ex.NeoExceptionName);
                 Assert.Equal("org.neo4j.cypher.SyntaxException", ex.NeoFullName);
 

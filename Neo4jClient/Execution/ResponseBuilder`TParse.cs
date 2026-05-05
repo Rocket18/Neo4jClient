@@ -23,9 +23,12 @@ namespace Neo4jClient.Execution
 
         private async Task<TParse> CastIntoResult(HttpResponseMessage response)
         {
-            return response == null || response.Content == null ?
-                default(TParse) :
-                await response.Content.ReadAsJsonAsync<TParse>(_executionConfiguration.JsonConverters).ConfigureAwait(false);
+            if (response == null || response.Content == null)
+                return default(TParse);
+            var str = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+            if (string.IsNullOrWhiteSpace(str))
+                return default(TParse);
+            return await response.Content.ReadAsJsonAsync<TParse>(_executionConfiguration.JsonConverters).ConfigureAwait(false);
         }
 
         public new IResponseBuilder<TParse> WithExpectedStatusCodes(params HttpStatusCode[] statusCodes)

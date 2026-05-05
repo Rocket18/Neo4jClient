@@ -132,6 +132,12 @@ namespace Neo4jClient
         }
 
         /// <inheritdoc />
+        public IBookmarkManager GetExecutableQueryBookmarkManager()
+        {
+            return driver.GetExecutableQueryBookmarkManager();
+        }
+
+        /// <inheritdoc />
         public Task<bool> VerifyAuthenticationAsync(IAuthToken authToken)
         {
             return driver.VerifyAuthenticationAsync(authToken);

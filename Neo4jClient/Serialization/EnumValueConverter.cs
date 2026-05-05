@@ -1,24 +1,41 @@
 ﻿using System;
-using System.Reflection;
-using Newtonsoft.Json;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Neo4jClient.Serialization
 {
-    public class EnumValueConverter : JsonConverter
+    /// <summary>
+    /// A <see cref="JsonConverterFactory"/> that handles serialization of all <see cref="Enum"/> types
+    /// by writing/reading the enum member name as a string.
+    /// </summary>
+    public class EnumValueConverter : JsonConverterFactory
     {
-        public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
+        public override bool CanConvert(Type typeToConvert) => typeToConvert.IsEnum;
+
+        public override JsonConverter CreateConverter(Type typeToConvert, JsonSerializerOptions options)
         {
-            writer.WriteValue(value.ToString());
+            var converterType = typeof(EnumValueConverterInner<>).MakeGenericType(typeToConvert);
+            return (JsonConverter)Activator.CreateInstance(converterType);
         }
 
-        public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
+        private class EnumValueConverterInner<T> : JsonConverter<T> where T : struct, Enum
         {
-            return Enum.Parse(objectType, reader.Value.ToString());
-        }
+            public override T Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+            {
+                if (reader.TokenType == JsonTokenType.Number)
+                {
+                    var numericValue = reader.GetInt64();
+                    return (T)Enum.ToObject(typeof(T), numericValue);
+                }
 
-        public override bool CanConvert(Type objectType)
-        {
-            return objectType.GetTypeInfo().IsEnum;
+                var value = reader.GetString();
+                return (T)Enum.Parse(typeof(T), value);
+            }
+
+            public override void Write(Utf8JsonWriter writer, T value, JsonSerializerOptions options)
+            {
+                writer.WriteStringValue(value.ToString());
+            }
         }
     }
 }

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -7,9 +7,10 @@ using Moq;
 using Neo4j.Driver;
 using Neo4jClient.Cypher;
 using Neo4jClient.Serialization;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
-using Newtonsoft.Json.Serialization;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.Json.Nodes;
+
 using NSubstitute;
 using Xunit;
 
@@ -159,36 +160,31 @@ namespace Neo4jClient.Tests
             {
                 var gc = Substitute.For<IGraphClient>();
                 gc.JsonConverters.Returns(BoltGraphClient.DefaultJsonConverters.ToList());
-                gc.JsonContractResolver.Returns(new DefaultContractResolver());
+                gc.JsonSerializerOptions.Returns(new JsonSerializerOptions());
 
                 return gc;
             }
         }
 
-        private class ConvertibleClass
+        public class ConvertibleClass
         {
             public string Value { get; set; }
         }
 
-        public class ConvertibleJsonConverter : JsonConverter
+        public class ConvertibleJsonConverter : System.Text.Json.Serialization.JsonConverter<ConvertibleClass>
         {
-            public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
+            public override ConvertibleClass Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
             {
-                throw new NotImplementedException();
-            }
-
-            public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
-            {
-                var jObject = JObject.Load(reader);
-                var t = JsonConvert.DeserializeObject<ConvertibleClass>(jObject.ToString());
+                using var doc = JsonDocument.ParseValue(ref reader);
+                // Use new options without this converter to avoid infinite recursion
+                var plainOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                var t = JsonSerializer.Deserialize<ConvertibleClass>(doc.RootElement.GetRawText(), plainOptions);
                 t.Value = "FooBar";
                 return t;
             }
 
-            public override bool CanConvert(Type objectType)
-            {
-                return objectType == typeof(ConvertibleClass);
-            }
+            public override void Write(Utf8JsonWriter writer, ConvertibleClass value, JsonSerializerOptions options)
+                => throw new NotImplementedException();
         }
 
         public class ToJsonMethod : IClassFixture<CultureInfoSetupFixture>

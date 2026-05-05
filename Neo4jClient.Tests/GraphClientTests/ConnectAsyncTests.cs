@@ -157,21 +157,17 @@ namespace Neo4jClient.Tests.GraphClientTests
                 {
                     var response = new HttpResponseMessage(HttpStatusCode.OK)
                     {
-                        Content = new StringContent(@"{
-                            'cypher' : 'http://foo/db/data/cypher',
-                            'batch' : 'http://foo/db/data/batch',
-                            'node' : 'http://foo/db/data/node',
-                            'node_index' : 'http://foo/db/data/index/node',
-                            'relationship_index' : 'http://foo/db/data/index/relationship',
-                            'reference_node' : 'http://foo/db/data/node/123',
-                            'neo4j_version' : '1.5.M02',
-                            'extensions_info' : 'http://foo/db/data/ext',
-                            'extensions' : {
-                                'GremlinPlugin' : {
-                                    'execute_script' : 'http://foo/db/data/ext/GremlinPlugin/graphdb/execute_script'
-                                }
-                            }
-                        }")
+                        Content = new StringContent("{\n" +
+                            "\"cypher\" : \"http://foo/db/data/cypher\",\n" +
+                            "\"batch\" : \"http://foo/db/data/batch\",\n" +
+                            "\"node\" : \"http://foo/db/data/node\",\n" +
+                            "\"node_index\" : \"http://foo/db/data/index/node\",\n" +
+                            "\"relationship_index\" : \"http://foo/db/data/index/relationship\",\n" +
+                            "\"reference_node\" : \"http://foo/db/data/node/123\",\n" +
+                            "\"neo4j_version\" : \"1.5.M02\",\n" +
+                            "\"extensions_info\" : \"http://foo/db/data/ext\",\n" +
+                            "\"extensions\" : {}\n" +
+                            "}")
                     };
                     var task = new Task<HttpResponseMessage>(() => response);
                     task.Start();
@@ -195,14 +191,14 @@ namespace Neo4jClient.Tests.GraphClientTests
                 {
                     var response = new HttpResponseMessage(HttpStatusCode.OK)
                     {
-                        Content = new StringContent(@"{
-                            'bolt_direct': 'neo4j://localhost:7687/bolt',
-                            'bolt_routing': 'neo4j://localhost:7687/route',
-                            'cluster': 'http://localhost:7474/db/{databaseName}/cluster',
-                            'transaction': 'http://localhost:7474/db/{databaseName}/tx',
-                            'neo4j_version': '4.0.0',
-                            'neo4j_edition': 'enterprise'
-                        }")
+                        Content = new StringContent("{\n" +
+                            "\"bolt_direct\": \"neo4j://localhost:7687/bolt\",\n" +
+                            "\"bolt_routing\": \"neo4j://localhost:7687/route\",\n" +
+                            "\"cluster\": \"http://localhost:7474/db/{databaseName}/cluster\",\n" +
+                            "\"transaction\": \"http://localhost:7474/db/{databaseName}/tx\",\n" +
+                            "\"neo4j_version\": \"4.0.0\",\n" +
+                            "\"neo4j_edition\": \"enterprise\"\n" +
+                            "}")
                     };
                     var task = new Task<HttpResponseMessage>(() => response);
                     task.Start();

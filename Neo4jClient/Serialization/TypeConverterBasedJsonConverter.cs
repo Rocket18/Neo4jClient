@@ -1,12 +1,19 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Reflection;
-using Newtonsoft.Json;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Neo4jClient.Serialization
 {
-    public class TypeConverterBasedJsonConverter : JsonConverter
+    /// <summary>
+    /// A <see cref="JsonConverterFactory"/> that handles types which have a <see cref="TypeConverter"/>
+    /// that can convert to/from <see cref="string"/>. Used for custom value types that are not
+    /// primitive or one of the well-known built-in types.
+    /// </summary>
+    public class TypeConverterBasedJsonConverter : JsonConverterFactory
     {
         internal static readonly Type[] BuiltinTypes =
         {
@@ -48,36 +55,42 @@ namespace Neo4jClient.Serialization
             typeof(Guid?)
         };
 
-        public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
+        public override bool CanConvert(Type typeToConvert)
         {
-            if (value == null)
+            var typeConverter = TypeDescriptor.GetConverter(typeToConvert);
+            return !typeToConvert.GetTypeInfo().IsPrimitive &&
+                   !BuiltinTypes.Contains(typeToConvert) &&
+                   typeConverter.GetType() != typeof(TypeConverter) &&
+                   typeConverter.CanConvertTo(typeof(string)) &&
+                   typeConverter.CanConvertFrom(typeof(string));
+        }
+
+        public override JsonConverter CreateConverter(Type typeToConvert, JsonSerializerOptions options)
+        {
+            var converterType = typeof(TypeConverterBasedJsonConverterInner<>).MakeGenericType(typeToConvert);
+            return (JsonConverter)Activator.CreateInstance(converterType);
+        }
+
+        private class TypeConverterBasedJsonConverterInner<T> : JsonConverter<T>
+        {
+            public override T Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
             {
-                writer.WriteValue((string) null);
-                return;
+                if (reader.TokenType == JsonTokenType.Null) return default;
+                var stringValue = reader.GetString();
+                var typeConverter = TypeDescriptor.GetConverter(typeof(T));
+                return (T)typeConverter.ConvertFromString(stringValue);
             }
 
-            var typeConverter = TypeDescriptor.GetConverter(value.GetType());
-            writer.WriteValue(typeConverter.ConvertToInvariantString(value));
-        }
-
-        public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
-        {
-            if (reader.Value == null) return null;
-            var typeConverter = TypeDescriptor.GetConverter(objectType);
-            return typeConverter.ConvertFromString(reader.Value.ToString());
-        }
-
-        public override bool CanConvert(Type objectType)
-        {
-            var typeOfString = typeof (string);
-            var typeConverter = TypeDescriptor.GetConverter(objectType);
-            var result =
-                !objectType.GetTypeInfo().IsPrimitive &&
-                !BuiltinTypes.Contains(objectType) &&
-                typeConverter.GetType() != typeof(TypeConverter) && // Ignore the default one
-                typeConverter.CanConvertTo(typeOfString) &&
-                typeConverter.CanConvertFrom(typeOfString);
-            return result;
+            public override void Write(Utf8JsonWriter writer, T value, JsonSerializerOptions options)
+            {
+                if (value == null)
+                {
+                    writer.WriteNullValue();
+                    return;
+                }
+                var typeConverter = TypeDescriptor.GetConverter(typeof(T));
+                writer.WriteStringValue(typeConverter.ConvertToInvariantString(value));
+            }
         }
     }
 }

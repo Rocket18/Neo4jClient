@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using FluentAssertions;
@@ -44,7 +44,7 @@ namespace Neo4jClient.Tests.Transactions
 
             var mockSession = Substitute.For<IAsyncSession>();
             var dbmsReturn = GetDbmsComponentsResponse();
-            mockSession.RunAsync("CALL dbms.components()").Returns(dbmsReturn);
+            mockSession.RunAsync("CALL dbms.components()  YIELD name, versions").Returns(dbmsReturn);
             mockSession.BeginTransactionAsync().Returns(Task.FromResult(mockTransaction));
             mockSession.BeginTransactionAsync(Arg.Any<Action<TransactionConfigBuilder>>()).Returns(Task.FromResult(mockTransaction));
 

@@ -1,9 +1,10 @@
-﻿using System;
+using System;
 using System.Globalization;
 using System.Linq;
 using FluentAssertions;
 using Neo4jClient.Serialization;
-using Newtonsoft.Json;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using Xunit;
 
 namespace Neo4jClient.Tests.Serialization
@@ -99,7 +100,7 @@ namespace Neo4jClient.Tests.Serialization
             var testNode = new TestNode {Foo = "foo", Bar = null};
             var serializer = new CustomJsonSerializer
             {
-                NullHandling = NullValueHandling.Ignore,
+                IgnoreNullValues = true,
                 JsonConverters = GraphClient.DefaultJsonConverters
             };
 
@@ -119,7 +120,7 @@ namespace Neo4jClient.Tests.Serialization
             var testNode = new TestNode {Foo = "foo", Bar = "bar"};
             var serializer = new CustomJsonSerializer
             {
-                NullHandling = NullValueHandling.Ignore,
+                IgnoreNullValues = true,
                 JsonConverters = GraphClient.DefaultJsonConverters
             };
 
@@ -138,7 +139,7 @@ namespace Neo4jClient.Tests.Serialization
             var testNode = new TestNodeWithEnum {Status = TestEnum.Value1};
             var serializer = new CustomJsonSerializer
             {
-                NullHandling = NullValueHandling.Ignore,
+                IgnoreNullValues = true,
                 JsonConverters = new[] {new EnumValueConverter()}
             };
 
@@ -247,7 +248,7 @@ namespace Neo4jClient.Tests.Serialization
             var testNode = new NodeWithBuiltInTypes {Bar = true};
             var serializer = new CustomJsonSerializer
             {
-                NullHandling = NullValueHandling.Ignore,
+                IgnoreNullValues = true,
                 JsonConverters = GraphClient.DefaultJsonConverters
             };
 
@@ -266,7 +267,7 @@ namespace Neo4jClient.Tests.Serialization
             var testNode = new NodeWithBuiltInTypes {Foo = 123};
             var serializer = new CustomJsonSerializer
             {
-                NullHandling = NullValueHandling.Ignore,
+                IgnoreNullValues = true,
                 JsonConverters = GraphClient.DefaultJsonConverters
             };
 
