@@ -82,9 +82,7 @@ namespace Neo4jClient
             // User-supplied non-factory converters (e.g. JsonConverter<DateTime>) should still be applied.
             var converter = converters?.FirstOrDefault(c =>
                 c.CanConvert(type) &&
-                !(c is JsonConverterFactory &&
-                  (type == typeof(DateTime) || type == typeof(DateTimeOffset) ||
-                   type == typeof(DateTime?) || type == typeof(DateTimeOffset?))));
+                !(c is JsonConverterFactory && IsBuiltInDateType(type)));
             if (converter != null)
             {
                 try
@@ -114,6 +112,14 @@ namespace Neo4jClient
                 return new LocalDateTime((DateTime)value);
             }
 
+#if NET6_0_OR_GREATER
+            if (type == typeof(DateOnly))
+            {
+                var d = (DateOnly)value;
+                return new LocalDate(d.Year, d.Month, d.Day);
+            }
+#endif
+
             if (typeInfo.IsGenericType && type.GetGenericTypeDefinition() == typeof(Dictionary<,>))
             {
                 return SerializeDictionary(type, value, converters, gc);
@@ -135,6 +141,18 @@ namespace Neo4jClient
         private static bool CanHandleNativeDateTimeType(Type type)
         {
             return type == typeof(DateTime) || type == typeof(DateTimeOffset) || type == typeof(TimeSpan);
+        }
+
+        private static bool IsBuiltInDateType(Type type)
+        {
+            if (type == typeof(DateTime) || type == typeof(DateTimeOffset) ||
+                type == typeof(DateTime?) || type == typeof(DateTimeOffset?))
+                return true;
+#if NET6_0_OR_GREATER
+            if (type == typeof(DateOnly) || type == typeof(DateOnly?))
+                return true;
+#endif
+            return false;
         }
 
         private static object UnwrapJsonElement(JsonElement je)
@@ -198,6 +216,14 @@ namespace Neo4jClient
             {
                 return new ZonedDateTime((DateTimeOffset)instance);
             }
+
+#if NET6_0_OR_GREATER
+            if (type == typeof(DateOnly))
+            {
+                var d = (DateOnly)instance;
+                return new LocalDate(d.Year, d.Month, d.Day);
+            }
+#endif
 
             if (type == typeof(TimeSpan))
             {
