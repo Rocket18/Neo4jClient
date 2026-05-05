@@ -77,9 +77,6 @@ namespace Neo4jClient.Serialization
                 if (clrProp != null && clrProp.GetCustomAttribute<Neo4jIgnoreAttribute>() != null)
                 {
                     prop.ShouldSerialize = (obj, val) => false;
-#if NET8_0_OR_GREATER
-                    prop.ShouldDeserialize = _ => false;
-#endif
                     continue;
                 }
 
