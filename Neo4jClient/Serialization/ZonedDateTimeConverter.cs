@@ -41,14 +41,43 @@ namespace Neo4jClient.Serialization
             throw new FormatException($"Cannot parse '{value}' as DateTimeOffset. Normalized value: '{normalized}'. Expected ISO 8601 or Memgraph ZonedDateTime format.");
         }
 
+        // Reads a DateTimeOffset from either a string or a Memgraph object
+        // e.g. {"Year":2020,"Month":2,"Day":13,"Hour":19,"Minute":49,"Second":54,"Nanosecond":0,"UtcOffsetMinutes":0}
+        internal static DateTimeOffset ReadDateTimeOffset(ref Utf8JsonReader reader)
+        {
+            if (reader.TokenType == JsonTokenType.String)
+                return ParseDateTimeOffset(reader.GetString());
+
+            if (reader.TokenType == JsonTokenType.StartObject)
+            {
+                int year = 0, month = 1, day = 1, hour = 0, minute = 0, second = 0, offsetMinutes = 0;
+                while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+                {
+                    if (reader.TokenType != JsonTokenType.PropertyName) continue;
+                    var propName = reader.GetString();
+                    reader.Read();
+                    switch (propName)
+                    {
+                        case "Year":             year          = reader.GetInt32(); break;
+                        case "Month":            month         = reader.GetInt32(); break;
+                        case "Day":              day           = reader.GetInt32(); break;
+                        case "Hour":             hour          = reader.GetInt32(); break;
+                        case "Minute":           minute        = reader.GetInt32(); break;
+                        case "Second":           second        = reader.GetInt32(); break;
+                        case "UtcOffsetMinutes": offsetMinutes = reader.GetInt32(); break;
+                    }
+                }
+                var offset = TimeSpan.FromMinutes(offsetMinutes);
+                return new DateTimeOffset(year, month, day, hour, minute, second, offset);
+            }
+
+            throw new JsonException($"Cannot read DateTimeOffset from token {reader.TokenType}");
+        }
+
         private class ZonedDateTimeInner : JsonConverter<ZonedDateTime>
         {
             public override ZonedDateTime Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-            {
-                var str = reader.GetString();
-                if (str == null) return default;
-                return new ZonedDateTime(ParseDateTimeOffset(str));
-            }
+                => new ZonedDateTime(ReadDateTimeOffset(ref reader));
 
             public override void Write(Utf8JsonWriter writer, ZonedDateTime value, JsonSerializerOptions options)
                 => writer.WriteStringValue(value.As<DateTimeOffset>().ToString("o"));
@@ -57,7 +86,7 @@ namespace Neo4jClient.Serialization
         private class DateTimeOffsetInner : JsonConverter<DateTimeOffset>
         {
             public override DateTimeOffset Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-                => ParseDateTimeOffset(reader.GetString());
+                => ReadDateTimeOffset(ref reader);
 
             public override void Write(Utf8JsonWriter writer, DateTimeOffset value, JsonSerializerOptions options)
                 => writer.WriteStringValue(value.ToString("o"));
@@ -68,7 +97,7 @@ namespace Neo4jClient.Serialization
             public override DateTimeOffset? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
             {
                 if (reader.TokenType == JsonTokenType.Null) return null;
-                return ParseDateTimeOffset(reader.GetString());
+                return ReadDateTimeOffset(ref reader);
             }
 
             public override void Write(Utf8JsonWriter writer, DateTimeOffset? value, JsonSerializerOptions options)
@@ -107,10 +136,41 @@ namespace Neo4jClient.Serialization
             return DateTime.Parse(value, null, System.Globalization.DateTimeStyles.RoundtripKind);
         }
 
+        // Reads a DateTime from either a string or a Memgraph object
+        // e.g. {"Year":2020,"Month":2,"Day":13,"Hour":19,"Minute":49,"Second":54,"Nanosecond":0}
+        internal static DateTime ReadDateTime(ref Utf8JsonReader reader)
+        {
+            if (reader.TokenType == JsonTokenType.String)
+                return ParseDateTime(reader.GetString());
+
+            if (reader.TokenType == JsonTokenType.StartObject)
+            {
+                int year = 0, month = 1, day = 1, hour = 0, minute = 0, second = 0;
+                while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+                {
+                    if (reader.TokenType != JsonTokenType.PropertyName) continue;
+                    var propName = reader.GetString();
+                    reader.Read();
+                    switch (propName)
+                    {
+                        case "Year":   year   = reader.GetInt32(); break;
+                        case "Month":  month  = reader.GetInt32(); break;
+                        case "Day":    day    = reader.GetInt32(); break;
+                        case "Hour":   hour   = reader.GetInt32(); break;
+                        case "Minute": minute = reader.GetInt32(); break;
+                        case "Second": second = reader.GetInt32(); break;
+                    }
+                }
+                return new DateTime(year, month, day, hour, minute, second);
+            }
+
+            throw new JsonException($"Cannot read DateTime from token {reader.TokenType}");
+        }
+
         private class LocalDateTimeInner : JsonConverter<LocalDateTime>
         {
             public override LocalDateTime Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-                => new LocalDateTime(ParseDateTime(reader.GetString()));
+                => new LocalDateTime(ReadDateTime(ref reader));
 
             public override void Write(Utf8JsonWriter writer, LocalDateTime value, JsonSerializerOptions options)
                 => writer.WriteStringValue(value.As<DateTime>().ToString("o"));
@@ -119,7 +179,7 @@ namespace Neo4jClient.Serialization
         private class DateTimeInner : JsonConverter<DateTime>
         {
             public override DateTime Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-                => ParseDateTime(reader.GetString());
+                => ReadDateTime(ref reader);
 
             public override void Write(Utf8JsonWriter writer, DateTime value, JsonSerializerOptions options)
                 => writer.WriteStringValue(value.ToString("o"));
@@ -130,7 +190,7 @@ namespace Neo4jClient.Serialization
             public override DateTime? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
             {
                 if (reader.TokenType == JsonTokenType.Null) return null;
-                return ParseDateTime(reader.GetString());
+                return ReadDateTime(ref reader);
             }
 
             public override void Write(Utf8JsonWriter writer, DateTime? value, JsonSerializerOptions options)
@@ -170,11 +230,38 @@ namespace Neo4jClient.Serialization
             return DateOnly.Parse(normalized);
         }
 
+        // Reads a DateOnly from either a string ("2024-01-15") or an object ({"Year":1994,"Month":2,"Day":26})
+        internal static DateOnly ReadDateOnly(ref Utf8JsonReader reader)
+        {
+            if (reader.TokenType == JsonTokenType.String)
+                return ParseDateOnly(reader.GetString());
+
+            if (reader.TokenType == JsonTokenType.StartObject)
+            {
+                int year = 0, month = 1, day = 1;
+                while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+                {
+                    if (reader.TokenType != JsonTokenType.PropertyName) continue;
+                    var propName = reader.GetString();
+                    reader.Read();
+                    switch (propName)
+                    {
+                        case "Year":  year  = reader.GetInt32(); break;
+                        case "Month": month = reader.GetInt32(); break;
+                        case "Day":   day   = reader.GetInt32(); break;
+                    }
+                }
+                return new DateOnly(year, month, day);
+            }
+
+            throw new JsonException($"Cannot read DateOnly from token {reader.TokenType}");
+        }
+
         private class LocalDateInner : JsonConverter<LocalDate>
         {
             public override LocalDate Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
             {
-                var d = ParseDateOnly(reader.GetString());
+                var d = ReadDateOnly(ref reader);
                 return new LocalDate(d.Year, d.Month, d.Day);
             }
 
@@ -185,7 +272,7 @@ namespace Neo4jClient.Serialization
         private class DateOnlyInner : JsonConverter<DateOnly>
         {
             public override DateOnly Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-                => ParseDateOnly(reader.GetString());
+                => ReadDateOnly(ref reader);
 
             public override void Write(Utf8JsonWriter writer, DateOnly value, JsonSerializerOptions options)
                 => writer.WriteStringValue(value.ToString("yyyy-MM-dd"));
@@ -196,7 +283,7 @@ namespace Neo4jClient.Serialization
             public override DateOnly? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
             {
                 if (reader.TokenType == JsonTokenType.Null) return null;
-                return ParseDateOnly(reader.GetString());
+                return ReadDateOnly(ref reader);
             }
 
             public override void Write(Utf8JsonWriter writer, DateOnly? value, JsonSerializerOptions options)

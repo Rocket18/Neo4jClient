@@ -103,6 +103,23 @@ namespace Neo4jClient.Serialization
             return null;
         }
 
+#if NET6_0_OR_GREATER
+        public static DateOnly ParseDateOnly(JsonNode value)
+        {
+            if (value is System.Text.Json.Nodes.JsonObject obj)
+            {
+                var year  = obj["Year"]?.GetValue<int>()  ?? 0;
+                var month = obj["Month"]?.GetValue<int>() ?? 1;
+                var day   = obj["Day"]?.GetValue<int>()   ?? 1;
+                return new DateOnly(year, month, day);
+            }
+            var raw = value.AsString()?.Trim();
+            var match = System.Text.RegularExpressions.Regex.Match(raw ?? "", @"^(?:LocalDate|Date)\('(.+?)'\)$");
+            if (match.Success) raw = match.Groups[1].Value;
+            return DateOnly.Parse(raw);
+        }
+#endif
+
         public static object CoerceValue(DeserializationContext context, PropertyInfo propertyInfo, JsonNode value, IEnumerable<TypeMapping> typeMappings, int nestingLevel)
         {
             if (value == null) return null;
@@ -156,6 +173,11 @@ namespace Neo4jClient.Serialization
 
             if (propertyType == typeof(TimeSpan))
                 return TimeSpan.Parse(value.AsString());
+
+#if NET6_0_OR_GREATER
+            if (propertyType == typeof(DateOnly))
+                return ParseDateOnly(value);
+#endif
 
             if (propertyType == typeof(Guid))
             {
@@ -248,6 +270,10 @@ namespace Neo4jClient.Serialization
                     instance = Guid.Parse(element.AsString());
                 else if (typeInfo.BaseType == typeof(Enum))
                     instance = Enum.Parse(type, element.AsString(), false);
+#if NET6_0_OR_GREATER
+                else if (type == typeof(DateOnly))
+                    instance = ParseDateOnly(element);
+#endif
                 else
                     instance = Convert.ChangeType(element.AsString(), type);
             }
