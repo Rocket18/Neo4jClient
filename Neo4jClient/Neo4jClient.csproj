@@ -10,7 +10,7 @@
         <PackageLicenseFile>LICENSE</PackageLicenseFile>
         <Description>A .NET client for Neo4j and Memgraph. Supports Cypher queries via fluent interfaces. Fork of Neo4jClient with Memgraph support and System.Text.Json serialization.</Description>
         <PackageTags>neo4j;memgraph;nosql;cypher;bolt;graph;system.text.json</PackageTags>
-        <Version>5.0.0</Version>
+        <Version>5.0.1</Version>
         <PackageReadmeFile>README.md</PackageReadmeFile>
     </PropertyGroup>
 
