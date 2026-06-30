@@ -364,6 +364,7 @@ namespace Neo4jClient
                 return stats;
             }
 
+            IAsyncSession session = null;
             try
             {
                 if (InTransaction)
@@ -379,7 +380,7 @@ namespace Neo4jClient
                 }
                 else
                 {
-                    var session = Driver.AsyncSession(ServerVersion, query.Database, query.IsWrite, query.Bookmarks);
+                    session = Driver.AsyncSession(ServerVersion, query.Database, query.IsWrite, query.Bookmarks);
 
                     async Task<List<IRecord>> Records(IAsyncQueryRunner work)
                     {
@@ -395,23 +396,36 @@ namespace Neo4jClient
 
                     results = ParseResults<TResult>(result, query);
 
-                    if (session != null)
-                    {
-                        lastBookmark = session.LastBookmark;
-                        lastBookmarks = session.LastBookmarks;
-                        await session.CloseAsync().ConfigureAwait(false);
-                    }
+                    lastBookmark = session.LastBookmark;
+                    lastBookmarks = session.LastBookmarks;
                 }
             }
             catch (AggregateException aggregateException)
             {
+                if (session != null)
+                {
+                    lastBookmark = session.LastBookmark;
+                    lastBookmarks = session.LastBookmarks;
+                }
                 context.Complete(query, lastBookmark, lastBookmarks, aggregateException.TryUnwrap(out var unwrappedException) ? unwrappedException : aggregateException);
                 throw;
             }
             catch (Exception e)
             {
+                if (session != null)
+                {
+                    lastBookmark = session.LastBookmark;
+                    lastBookmarks = session.LastBookmarks;
+                }
                 context.Complete(query, lastBookmark, lastBookmarks, e);
                 throw;
+            }
+            finally
+            {
+                if (session != null)
+                {
+                    await session.CloseAsync().ConfigureAwait(false);
+                }
             }
 
             context.Complete(query, lastBookmark, lastBookmarks, results.Count, stats);
@@ -479,18 +493,28 @@ namespace Neo4jClient
             else
             {
                 var session = Driver.AsyncSession(ServerVersion, query.Database, query.IsWrite, query.Bookmarks);
-                IResultCursor cursor;
-                if (query.IsWrite)
-                    cursor = await session.WriteTransactionAsync(s => s.RunAsync(query, this)).ConfigureAwait(false);
-                else
-                    cursor = await session.ReadTransactionAsync(s => s.RunAsync(query, this)).ConfigureAwait(false);
-
-                if (query.IncludeQueryStats)
+                try
                 {
-                    var summary = await cursor.ConsumeAsync().ConfigureAwait(false);
-                    executionContext.Complete(query, session.LastBookmark, session.LastBookmarks, new QueryStats(summary.Counters));
+                    IResultCursor cursor;
+                    if (query.IsWrite)
+                        cursor = await session.WriteTransactionAsync(s => s.RunAsync(query, this)).ConfigureAwait(false);
+                    else
+                        cursor = await session.ReadTransactionAsync(s => s.RunAsync(query, this)).ConfigureAwait(false);
+
+                    if (query.IncludeQueryStats)
+                    {
+                        var summary = await cursor.ConsumeAsync().ConfigureAwait(false);
+                        executionContext.Complete(query, session.LastBookmark, session.LastBookmarks, new QueryStats(summary.Counters));
+                    }
+                    else executionContext.Complete(query, session.LastBookmark, session.LastBookmarks);
                 }
-                else executionContext.Complete(query, session.LastBookmark, session.LastBookmarks);
+                finally
+                {
+                    if (session != null)
+                    {
+                        await session.CloseAsync().ConfigureAwait(false);
+                    }
+                }
             }
         }
 
