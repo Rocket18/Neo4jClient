@@ -50,6 +50,17 @@ namespace Neo4jClient.Serialization
         {
             if (string.IsNullOrEmpty(content)) return content;
             if (!content.Contains('\'')) return content;
+
+            try
+            {
+                JsonNode.Parse(content);
+                return content;
+            }
+            catch
+            {
+                // Fallback to heuristic replacement if it is not valid JSON
+            }
+
             // Heuristic: single-quoted JSON has patterns like 'key': or 'value', or 'value']
             if (SingleQuotedJsonPattern.IsMatch(content))
                 return content.Replace("'", "\"");
