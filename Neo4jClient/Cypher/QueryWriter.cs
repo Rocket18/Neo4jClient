@@ -77,7 +77,7 @@ namespace Neo4jClient.Cypher
             };
         }
 
-        public CypherQuery ToCypherQuery(JsonSerializerOptions jsonSerializerOptions = null, bool isWrite = true, bool includeQueryStats = false)
+        public CypherQuery ToCypherQuery(JsonSerializerOptions jsonSerializerOptions = null, bool isWrite = false, bool includeQueryStats = false)
         {
             var queryText = queryTextBuilder
                 .ToString()

@@ -21,6 +21,7 @@ namespace Neo4jClient.Cypher
     {
         private readonly string queryText;
         private readonly IDictionary<string, object> queryParameters;
+        private string cachedDebugQueryText;
 
         public CypherQuery(
             string queryText,
@@ -41,7 +42,7 @@ namespace Neo4jClient.Cypher
             JsonSerializerOptions jsonSerializerOptions = null, 
             int? maxExecutionTime = null, 
             NameValueCollection customHeaders = null,
-            bool isWrite = true,
+            bool isWrite = false,
             IEnumerable<Bookmark> bookmarks = null,
             string identifier = null,
             bool includeQueryStats = false
@@ -102,9 +103,15 @@ namespace Neo4jClient.Cypher
         {
             get
             {
-                if (queryParameters == null)
+                if (cachedDebugQueryText != null)
                 {
-                    return queryText;
+                    return cachedDebugQueryText;
+                }
+
+                if (queryParameters == null || queryParameters.Count == 0)
+                {
+                    cachedDebugQueryText = queryText;
+                    return cachedDebugQueryText;
                 }
 
                 var serializer = BuildSerializer();
@@ -113,11 +120,12 @@ namespace Neo4jClient.Cypher
                 foreach (var key in queryParameters.Keys)
                 {
                     var value = queryParameters[key];
-                    value = serializer.Serialize(value);  
-                    text = Regex.Replace(text, $"\\$\\b{key}\\b", value.ToString());
+                    var serialized = serializer.Serialize(value)?.ToString() ?? "null";
+                    text = Regex.Replace(text, $"\\$\\b{Regex.Escape(key)}\\b", _ => serialized);
                 }
-                
-                return text;
+
+                cachedDebugQueryText = text;
+                return cachedDebugQueryText;
             }
         }
     }

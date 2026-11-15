@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
-        <TargetFrameworks>netstandard2.0;net6.0;net8.0</TargetFrameworks>
+        <TargetFrameworks>netstandard2.0;net8.0</TargetFrameworks>
         <PackageId>Neo4jClient.Memgraph</PackageId>
         <Company>Glodibi</Company>
         <Copyright>2026 Glodibi. Originally Copyright 2022 Readify, Tatham Oddie, Charlotte Skardon</Copyright>
@@ -10,7 +10,7 @@
         <PackageLicenseFile>LICENSE</PackageLicenseFile>
         <Description>A .NET client for Neo4j and Memgraph. Supports Cypher queries via fluent interfaces. Fork of Neo4jClient with Memgraph support and System.Text.Json serialization.</Description>
         <PackageTags>neo4j;memgraph;nosql;cypher;bolt;graph;system.text.json</PackageTags>
-        <Version>5.0.3</Version>
+        <Version>5.0.4</Version>
         <PackageReadmeFile>README.md</PackageReadmeFile>
     </PropertyGroup>
 

@@ -154,7 +154,7 @@ namespace Neo4jClient
         #region Implementation of ICypherGraphClient
 
         /// <inheritdoc />
-        public ICypherFluentQuery Cypher => new CypherFluentQuery(this, true);
+        public ICypherFluentQuery Cypher => new CypherFluentQuery(this, false);
         #endregion
         
         private void CheckTransactionEnvironmentWithPolicy(IExecutionPolicy policy)
@@ -480,33 +480,57 @@ namespace Neo4jClient
             if (InTransaction)
             {
                 executionContext.Database = Transaction.Database;
-                var response = await transactionManager.EnqueueCypherRequest($"The query was: {query.QueryText}", this, query).ConfigureAwait(false);
-                QueryStats stats = null;
-                if (query.IncludeQueryStats)
+                try
                 {
+                    var response = await transactionManager.EnqueueCypherRequest($"The query was: {query.QueryText}", this, query).ConfigureAwait(false);
                     var summary = await response.StatementResult.ConsumeAsync().ConfigureAwait(false);
-                    stats = new QueryStats(summary.Counters);
+                    var stats = query.IncludeQueryStats ? new QueryStats(summary.Counters) : null;
+                    executionContext.Complete(query, transactionManager.LastBookmark, null, stats);
                 }
-
-                OnOperationCompleted(new OperationCompletedEventArgs {QueryText = $"BOLT:{query.QueryText}", LastBookmark = transactionManager.LastBookmark, QueryStats = stats});
+                catch (AggregateException aggregateException)
+                {
+                    executionContext.Complete(query, transactionManager.LastBookmark, null, aggregateException.TryUnwrap(out var unwrappedException) ? unwrappedException : aggregateException);
+                    throw;
+                }
+                catch (Exception e)
+                {
+                    executionContext.Complete(query, transactionManager.LastBookmark, null, e);
+                    throw;
+                }
             }
             else
             {
                 var session = Driver.AsyncSession(ServerVersion, query.Database, query.IsWrite, query.Bookmarks);
                 try
                 {
-                    IResultCursor cursor;
-                    if (query.IsWrite)
-                        cursor = await session.WriteTransactionAsync(s => s.RunAsync(query, this)).ConfigureAwait(false);
-                    else
-                        cursor = await session.ReadTransactionAsync(s => s.RunAsync(query, this)).ConfigureAwait(false);
+                    async Task<IResultSummary> RunAndConsumeAsync(IAsyncQueryRunner work)
+                    {
+                        var cursor = await work.RunAsync(query, this).ConfigureAwait(false);
+                        return await cursor.ConsumeAsync().ConfigureAwait(false);
+                    }
+
+                    var summary = query.IsWrite
+                        ? await session.ExecuteWriteAsync(RunAndConsumeAsync).ConfigureAwait(false)
+                        : await session.ExecuteReadAsync(RunAndConsumeAsync).ConfigureAwait(false);
 
                     if (query.IncludeQueryStats)
                     {
-                        var summary = await cursor.ConsumeAsync().ConfigureAwait(false);
                         executionContext.Complete(query, session.LastBookmark, session.LastBookmarks, new QueryStats(summary.Counters));
                     }
-                    else executionContext.Complete(query, session.LastBookmark, session.LastBookmarks);
+                    else
+                    {
+                        executionContext.Complete(query, session.LastBookmark, session.LastBookmarks);
+                    }
+                }
+                catch (AggregateException aggregateException)
+                {
+                    executionContext.Complete(query, session.LastBookmark, session.LastBookmarks, aggregateException.TryUnwrap(out var unwrappedException) ? unwrappedException : aggregateException);
+                    throw;
+                }
+                catch (Exception e)
+                {
+                    executionContext.Complete(query, session.LastBookmark, session.LastBookmarks, e);
+                    throw;
                 }
                 finally
                 {
