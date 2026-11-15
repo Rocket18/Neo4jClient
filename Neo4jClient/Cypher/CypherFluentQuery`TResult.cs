@@ -9,7 +9,7 @@ namespace Neo4jClient.Cypher
         CypherFluentQuery,
         IOrderedCypherFluentQuery<TResult>
     {
-        public CypherFluentQuery(IGraphClient client, QueryWriter writer, bool isWrite = true, bool includeQueryStats = false)
+        public CypherFluentQuery(IGraphClient client, QueryWriter writer, bool isWrite = false, bool includeQueryStats = false)
             : base(client, writer, isWrite, includeQueryStats)
         {}
 
